@@ -199,16 +199,24 @@ fun ComposeScreen(
                 onClick = {
                     val barcode = selectedBarcode
                     if (message.isNotBlank() && barcode != null) {
+                        viewModel.incrementBarcodeCounter(barcode)
                         val options = mutableListOf<String>()
                         if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
                         if (isTimed) options.add("${EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
 
-                        encryptedText = EncryptionManager.encrypt(
+                        val result = EncryptionManager.encrypt(
                             plaintext = message,
-                            key = barcode.value,
+                            ikm = barcode.value,
+                            salt = EncryptionManager.createSalt(),
                             barcodeIdentifier = barcode.identifier,
+                            counter = barcode.counter + 1, // Use the next counter value
                             options = options
                         )
+                        if (result != null) {
+                            encryptedText = result
+                        } else {
+                            Toast.makeText(context, "Encryption failed.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

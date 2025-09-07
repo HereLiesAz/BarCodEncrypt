@@ -40,10 +40,26 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
     }
 
     /**
-     * Deletes a barcode from the database.
+     * Deletes a barcode from the.
      * @param barcode The barcode to be deleted.
      */
     suspend fun deleteBarcode(barcode: Barcode) {
         barcodeDao.deleteBarcode(barcode)
+    }
+
+    /**
+     * Resets the counter for a specific barcode.
+     * @param barcodeId The ID of the barcode to reset.
+     */
+    suspend fun resetCounter(barcodeId: Int) {
+        barcodeDao.resetCounter(barcodeId)
+    }
+
+    /**
+     * Increments the counter for a specific barcode.
+     * @param barcodeId The ID of the barcode to increment.
+     */
+    suspend fun incrementCounter(barcodeId: Int) {
+        barcodeDao.incrementCounter(barcodeId)
     }
 }

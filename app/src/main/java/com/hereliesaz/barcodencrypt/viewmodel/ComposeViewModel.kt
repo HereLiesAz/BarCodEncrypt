@@ -43,4 +43,8 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
         // Clean up the observer when the ViewModel is destroyed
         barcodesLiveData?.removeObserver(barcodeObserver)
     }
+
+    fun incrementBarcodeCounter(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
+        repository.incrementCounter(barcode.id)
+    }
 }
