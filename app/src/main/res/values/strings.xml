@@ -1,3 +1,63 @@
 <resources>
-    <string name="app_name">BarCodEncrypt</string>
+    <string name="app_name">Barcodencrypt</string>
+    <string name="accessibility_service_label">Barcodencrypt Watcher</string>
+    <string name="accessibility_service_description">
+        This service allows Barcodencrypt to detect encrypted messages on screen.
+        It passively observes text changes to find message headers. No personal data is stored.
+    </string>
+    <string name="add_contact">Add Contact</string>
+    <string name="point_camera_at_a_barcode">Point camera at a barcode</string>
+    <string name="camera_permission_denied">Camera permission is required to scan barcodes. Please enable it in settings.</string>
+    <string name="add_barcode_identifier">Add Barcode Identifier</string>
+    <string name="enter_a_unique_identifier_for_this_barcode">Enter a unique identifier for this barcode</string>
+    <string name="identifier">Identifier</string>
+    <string name="compose_message">Compose Message</string>
+    <string name="new_action">New Action</string>
+    <string name="select_an_action">Select an Action</string>
+    <string name="message">Message</string>
+    <string name="encrypt">Encrypt</string>
+    <string name="copy">Copy</string>
+    <string name="no_contacts_available">No contacts. Add a contact to begin.</string>
+    <string name="no_barcodes_for_contact">This contact has no barcodes assigned.</string>
+    <string name="encrypted_message_will_appear_here">Encrypted message will appear here</string>
+    <string name="message_copied_to_clipboard">Message copied to clipboard</string>
+    <string name="service_status_enabled">Watcher Service: Enabled</string>
+    <string name="service_status_disabled">Watcher Service: Disabled</string>
+    <string name="enable_service">Enable Service</string>
+    <string name="decrypt_message">Decrypt Message</string>
+    <string name="notification_channel_name">Encrypted Messages</string>
+    <string name="notification_channel_description">Notifications for newly detected encrypted messages.</string>
+    <string name="message_detected">Encrypted Message Detected</string>
+    <string name="tap_to_decrypt">Tap to begin decryption ritual</string>
+    <string name="waiting_for_scan">Waiting for key...</string>
+    <string name="incorrect_key">Incorrect Key. The secret is safe.</string>
+    <string name="notification_permission_required">Notification Permission Required</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="notifications_are_needed_for_the_watcher_to_alert_you">Notifications are needed for the Watcher to alert you.</string>
+    <string name="scan_key">Scan Key</string>
+    <string name="encrypted_ciphertext">Encrypted Ciphertext</string>
+    <string name="contact_details">Contact Details</string>
+    <string name="delete_contact">Delete Contact</string>
+    <string name="delete_barcode">Delete Barcode</string>
+    <string name="add_barcode">Add Barcode</string>
+    <string name="delete_contact_confirmation">Are you sure you want to delete this contact and all associated barcodes? This action cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="no_barcodes_assigned">No barcodes assigned. Tap the + to add one.</string>
+    <string name="manage_contact_keys">Manage Contact Keys</string>
+    <string name="select_a_contact_to_manage_their_keys">Select a contact to manage their keys</string>
+    <string name="contacts_permission_required">Contacts Permission Required</string>
+    <string name="permission_needed_to_assign_keys_to_contacts">Permission is needed to assign keys to your contacts.</string>
+    <string name="select_recipient_and_key">Select Recipient &amp; Key</string>
+    <string name="no_recipient_selected">No Recipient Selected</string>
+    <string name="no_key_selected">No Key Selected</string>
+    <string name="recipient">Recipient</string>
+    <string name="key">Key</string>
+    <string name="select_key">Select Key</string>
+    <string name="overlay_permission_required">Overlay Permission Required</string>
+    <string name="permission_needed_to_highlight_messages_on_screen">Permission is needed to highlight messages on screen.</string>
+    <string name="single_use_message">Single-Use Message (self-destructs after one successful decryption)</string>
+    <string name="timed_message">Timed Message</string>
+    <string name="duration_seconds">Duration (s)</string>
 </resources>
+

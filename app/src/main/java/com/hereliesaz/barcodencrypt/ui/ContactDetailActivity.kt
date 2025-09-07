@@ -1,0 +1,192 @@
+package com.hereliesaz.barcodencrypt.ui
+
+import android.app.Activity
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
+import com.hereliesaz.barcodencrypt.data.Barcode
+import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
+import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
+
+class ContactDetailActivity : ComponentActivity() {
+
+    private lateinit var viewModel: ContactDetailViewModel
+    private var contactLookupKey: String? = null
+    private var contactName: String? = null
+
+    private val scanResultLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val barcodeValue = result.data?.getStringExtra(ScannerActivity.EXTRA_SCAN_RESULT)
+                if (contactLookupKey != null && !barcodeValue.isNullOrBlank()) {
+                    viewModel.pendingScan.value = Triple(contactLookupKey!!, barcodeValue, true)
+                }
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        contactLookupKey = intent.getStringExtra(EXTRA_CONTACT_LOOKUP_KEY)
+        contactName = intent.getStringExtra(EXTRA_CONTACT_NAME)
+
+        if (contactLookupKey == null || contactName == null) {
+            finish()
+            return
+        }
+
+        val factory = ContactDetailViewModelFactory(application, contactLookupKey!!)
+        viewModel = ViewModelProvider(this, factory)[ContactDetailViewModel::class.java]
+
+        setContent {
+            BarcodencryptTheme {
+                ContactDetailScreen(
+                    viewModel = viewModel,
+                    contactName = contactName!!,
+                    onNavigateUp = { finish() },
+                    onLaunchScanner = {
+                        val intent = Intent(this, ScannerActivity::class.java)
+                        scanResultLauncher.launch(intent)
+                    }
+                )
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_CONTACT_LOOKUP_KEY = "com.hereliesaz.barcodencrypt.CONTACT_LOOKUP_KEY"
+        const val EXTRA_CONTACT_NAME = "com.hereliesaz.barcodencrypt.CONTACT_NAME"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ContactDetailScreen(
+    viewModel: ContactDetailViewModel,
+    contactName: String,
+    onNavigateUp: () -> Unit,
+    onLaunchScanner: () -> Unit
+) {
+    val barcodes by viewModel.barcodes.observeAsState(emptyList())
+
+    val pendingScan by viewModel.pendingScan.observeAsState(initial = Triple("", "", false))
+    if (pendingScan.third) {
+        AddBarcodeIdentifierDialog(
+            onDismiss = { viewModel.pendingScan.value = Triple("", "", false) },
+            onConfirm = { identifier ->
+                val newBarcode = Barcode(
+                    contactLookupKey = pendingScan.first,
+                    identifier = identifier,
+                    value = pendingScan.second
+                )
+                viewModel.insertBarcode(newBarcode)
+                viewModel.pendingScan.value = Triple("", "", false)
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(contactName) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateUp) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onLaunchScanner) {
+                Icon(Icons.Default.Add, contentDescription = "Add Barcode")
+            }
+        }
+    ) { padding ->
+        if (barcodes.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text( "No barcodes assigned. Tap the + to add one.", modifier = Modifier.padding(16.dp))
+            }
+        } else {
+            LazyColumn(modifier = Modifier.padding(padding).padding(8.dp)) {
+                items(barcodes) { barcode ->
+                    BarcodeItem(barcode = barcode, onDelete = { viewModel.deleteBarcode(it) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BarcodeItem(barcode: Barcode, onDelete: (Barcode) -> Unit) {
+    var showDeleteBarcodeDialog by remember { mutableStateOf(false) }
+
+    ListItem(
+        headlineContent = { Text(barcode.identifier) },
+        supportingContent = { Text(barcode.value, maxLines = 1) },
+        trailingContent = {
+            IconButton(onClick = { showDeleteBarcodeDialog = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+            }
+        }
+    )
+
+    if (showDeleteBarcodeDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteBarcodeDialog = false },
+            title = { Text("Delete Barcode?") },
+            text = { Text("Are you sure you want to delete the barcode '${barcode.identifier}'?") },
+            confirmButton = {
+                Button(
+                    onClick = { onDelete(barcode); showDeleteBarcodeDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteBarcodeDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+fun AddBarcodeIdentifierDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember { mutableStateOf(TextFieldValue("")) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Barcode Identifier") },
+        text = {
+            Column {
+                Text("Enter a unique identifier for this barcode.")
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Identifier") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(text.text); onDismiss() }) { Text("OK") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
