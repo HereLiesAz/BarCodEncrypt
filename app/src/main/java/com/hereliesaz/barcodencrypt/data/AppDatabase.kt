@@ -10,13 +10,18 @@ import androidx.room.RoomDatabase
  * It no longer knows of 'Contacts', only of the sigils ('Barcodes') themselves.
  * It is a singleton, a lonely and singular vault of secrets.
  */
-@Database(entities = [Barcode::class], version = 1, exportSchema = false)
+@Database(entities = [Barcode::class, RevokedMessage::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     /**
      * @return The Data Access Object for barcodes.
      */
     abstract fun barcodeDao(): BarcodeDao
+
+    /**
+     * @return The Data Access Object for the revoked message blacklist.
+     */
+    abstract fun revokedMessageDao(): RevokedMessageDao
 
     companion object {
         // A volatile instance ensures that the value is always up-to-date and the same
@@ -37,7 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "barcodencrypt_database"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }
