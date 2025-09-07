@@ -25,33 +25,55 @@ import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.services.MessageDetectionService
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.ContactDetailActivity
-import com.hereliesaz.barcodencrypt.ui.ScannerActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
+import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.ScannerManager
 import com.hereliesaz.barcodencrypt.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * The main entry point of the application.
+ *
+ * This Activity serves several key roles:
+ * 1.  **Permissions Hub:** It displays the status of all critical permissions (Accessibility,
+ *     Overlay, Contacts) and provides buttons for the user to grant them.
+ * 2.  **Navigation:** It provides the main navigation buttons to access the "Compose Message"
+ *     and "Manage Contact Keys" flows.
+ * 3.  **Scanner Listener:** It collects the [ScannerManager.requests] flow. When a scan is
+ *     requested from another component (like the [OverlayService]), this Activity launches
+ *     the [ScannerActivity] and returns the result back to the [ScannerManager].
+ */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    /**
+     * Handles the result from [ScannerActivity].
+     * When a barcode is successfully scanned, the result is passed to the [ScannerManager],
+     * which then forwards it to the original requester.
+     */
     private val scanLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val scannedValue = if (result.resultCode == RESULT_OK) {
-                result.data?.getStringExtra(ScannerActivity.EXTRA_SCAN_RESULT)
+                result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
             } else {
                 null
             }
             ScannerManager.onScanResult(scannedValue)
         }
 
+    /** Handles the result of the runtime permission request for notifications. */
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             viewModel.notificationPermissionStatus.value = isGranted
         }
 
+    /**
+     * Handles the result of the runtime permission request for reading contacts.
+     * If permission is granted, it immediately launches the contact picker.
+     */
     private val contactsPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             viewModel.contactsPermissionStatus.value = isGranted
@@ -62,6 +84,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    /**
+     * Handles the result from the contact picker.
+     * When a contact is successfully chosen, this extracts the contact's URI and launches
+     * the [ContactDetailActivity] for them.
+     */
     private val contactPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
@@ -74,6 +101,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Launch a coroutine to listen for scan requests from the ScannerManager.
+        // This allows any component in the app to request a scan, and this Activity,
+        // as the main UI entry point, will handle launching the scanner.
         lifecycleScope.launch {
             ScannerManager.requests.collect {
                 scanLauncher.launch(Intent(this@MainActivity, ScannerActivity::class.java))
@@ -143,8 +173,8 @@ class MainActivity : ComponentActivity() {
                 val displayName = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
 
                 val intent = Intent(this, ContactDetailActivity::class.java).apply {
-                    putExtra(ContactDetailActivity.EXTRA_CONTACT_LOOKUP_KEY, lookupKey)
-                    putExtra(ContactDetailActivity.EXTRA_CONTACT_NAME, displayName)
+                    putExtra(Constants.IntentKeys.CONTACT_LOOKUP_KEY, lookupKey)
+                    putExtra(Constants.IntentKeys.CONTACT_NAME, displayName)
                 }
                 startActivity(intent)
             }
