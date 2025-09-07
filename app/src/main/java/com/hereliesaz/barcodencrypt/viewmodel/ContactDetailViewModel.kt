@@ -44,6 +44,15 @@ class ContactDetailViewModel(application: Application, contactLookupKey: String)
     fun insertBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
         repository.insertBarcode(barcode)
     }
+
+    /**
+     * Resets the counter for a specific barcode back to 0.
+     * @param barcode The barcode whose counter should be reset.
+     */
+    fun resetCounter(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
+        val updatedBarcode = barcode.copy(counter = 0L)
+        repository.updateBarcode(updatedBarcode)
+    }
 }
 
 /**

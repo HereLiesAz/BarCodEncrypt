@@ -34,8 +34,8 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.util.Constants
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -72,9 +72,7 @@ class ScannerActivity : ComponentActivity() {
                     onBarcodeFound = { barcodeValue ->
                         if (isFinishing || isDestroyed) return@ScannerScreen
                         val resultIntent = Intent().apply {
-                            putExtra(EXTRA_SCAN_RESULT, barcodeValue)
-                            val contactId = intent.getIntExtra(MainActivity.EXTRA_CONTACT_ID, -1)
-                            putExtra(MainActivity.EXTRA_CONTACT_ID, contactId)
+                            putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
                         }
                         setResult(Activity.RESULT_OK, resultIntent)
                         finish()
@@ -87,10 +85,6 @@ class ScannerActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-    }
-
-    companion object {
-        const val EXTRA_SCAN_RESULT = "com.hereliesaz.barcodencrypt.SCAN_RESULT"
     }
 }
 
