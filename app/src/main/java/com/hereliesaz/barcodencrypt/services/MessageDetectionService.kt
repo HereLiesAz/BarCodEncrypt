@@ -8,8 +8,10 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.BarcodeRepository
+import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,14 +25,16 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class MessageDetectionService : AccessibilityService() {
 
-    private lateinit var repository: BarcodeRepository
+    private lateinit var barcodeRepository: BarcodeRepository
+    private lateinit var revokedMessageRepository: RevokedMessageRepository
     private lateinit var serviceScope: CoroutineScope
     private val seenMessages = ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
-        val barcodeDao = AppDatabase.getDatabase(application).barcodeDao()
-        repository = BarcodeRepository(barcodeDao)
+        val database = AppDatabase.getDatabase(application)
+        barcodeRepository = BarcodeRepository(database.barcodeDao())
+        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         Log.d(TAG, "Watcher service has been created.")
     }
@@ -57,9 +61,18 @@ class MessageDetectionService : AccessibilityService() {
                     seenMessages[fullMatch] = now
                     val parts = fullMatch.split("::")
                     if (parts.size >= 5) {
+                        val options = parts[2]
                         val identifier = parts[3]
                         serviceScope.launch {
-                            val barcode = repository.getBarcodeByIdentifier(identifier)
+                            val messageHash = EncryptionManager.sha256(fullMatch)
+                            if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
+                                revokedMessageRepository.isMessageRevoked(messageHash)
+                            ) {
+                                Log.i(TAG, "Ignoring revoked single-use message.")
+                                return@launch
+                            }
+
+                            val barcode = barcodeRepository.getBarcodeByIdentifier(identifier)
                             if (barcode != null) {
                                 val bounds = Rect()
                                 nodeInfo.getBoundsInScreen(bounds)

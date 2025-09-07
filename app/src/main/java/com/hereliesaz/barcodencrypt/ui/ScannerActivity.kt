@@ -73,8 +73,6 @@ class ScannerActivity : ComponentActivity() {
                         if (isFinishing || isDestroyed) return@ScannerScreen
                         val resultIntent = Intent().apply {
                             putExtra(EXTRA_SCAN_RESULT, barcodeValue)
-                            val contactId = intent.getIntExtra(MainActivity.EXTRA_CONTACT_ID, -1)
-                            putExtra(MainActivity.EXTRA_CONTACT_ID, contactId)
                         }
                         setResult(Activity.RESULT_OK, resultIntent)
                         finish()
