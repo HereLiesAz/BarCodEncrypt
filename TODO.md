@@ -13,8 +13,8 @@ A list of sorrows now embraced.
     -   [x] Settle on a definitive message header format (`BCE::v1::{opts}::{id}::`).
     -   [x] Develop a robust method to identify and extract the encrypted payload from a `AccessibilityNodeInfo` tree.
     -   [x] Implement text highlighting on the detected message using an `OverlayService`.
--   [ ] Flesh out the `EncryptionManager`. The current AES/GCM implementation is solid, but advanced features are pending.
-    -   [ ] Design the rolling key system.
+-   [x] Flesh out the `EncryptionManager`. The current AES/GCM implementation is solid, but advanced features are pending.
+    -   [x] Design the rolling key system.
     -   [ ] Design the temporary key exchange protocol. How does the barcode, the rolling key, and the device state produce the final decryption key?
 -   [x] Create the UI for adding/managing contacts and their associated barcodes (`ContactDetailActivity`).
 -   [x] Create the UI for composing and encrypting a new message (`ComposeActivity`).

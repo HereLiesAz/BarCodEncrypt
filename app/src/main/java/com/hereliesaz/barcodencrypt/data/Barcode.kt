@@ -1,24 +1,29 @@
 package com.hereliesaz.barcodencrypt.data
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/**
+ * A record of a single cryptographic sigil. A barcode.
+ * It is forever bound to a contact, not by a fragile integer ID, but by their persistent,
+ * cryptic `lookupKey` from the master Android `ContactsContract`.
+ *
+ * @param id The primary key, a meaningless number for the Scribe's internal use.
+ * @param contactLookupKey The persistent key that identifies a contact in the Android system. This is our link to a real person.
+ * @param identifier The human-readable name for this key (e.g., "Work Phone QR").
+ * @param value The raw, sacred text of the barcode itself. This is the Initial Keying Material (IKM).
+ * @param counter The message counter for the rolling key. Incremented for each encrypted message.
+ */
 @Entity(
     tableName = "barcodes",
-    foreignKeys = [ForeignKey(
-        entity = Contact::class,
-        parentColumns = ["lookupKey"],
-        childColumns = ["contactLookupKey"],
-        onDelete = ForeignKey.CASCADE
-    )],
     indices = [Index(value = ["contactLookupKey"])]
 )
 data class Barcode(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
     val contactLookupKey: String,
     val identifier: String,
     val value: String,
-    var counter: Int = 0 // Default counter to 0
+    val counter: Long = 0L
 )
