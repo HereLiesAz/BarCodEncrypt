@@ -36,14 +36,12 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Add the 'counter' column to the 'barcodes' table with a default value of 0.
-                db.execSQL("ALTER TABLE barcodes ADD COLUMN counter INTEGER NOT NULL DEFAULT 0")
+                // Create the new 'barcodes' table, matching the Barcode entity fields.
+                db.execSQL("CREATE TABLE IF NOT EXISTS `barcodes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `contactLookupKey` TEXT NOT NULL, `identifier` TEXT NOT NULL, `value` TEXT NOT NULL, `counter` INTEGER NOT NULL DEFAULT 0)")
                 // Create the new 'revoked_messages' table.
-                db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageSignature` TEXT NOT NULL, PRIMARY KEY(`messageSignature`))")
-                // Assuming the contacts table also needs to be created in this migration if it wasn't in version 1
-                // If contacts table existed in version 1, this migration might need adjustment
-                // For now, let's add its creation. If it causes issues, we'll refine.
-                db.execSQL("CREATE TABLE IF NOT EXISTS `contacts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `notes` TEXT)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))")
+                // Create the new 'contacts' table, matching the Contact entity fields.
+                db.execSQL("CREATE TABLE IF NOT EXISTS `contacts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `lookupKey` TEXT NOT NULL, `name` TEXT NOT NULL)")
             }
         }
 
@@ -54,7 +52,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "barcodencrypt_database"
                 )
-                .addMigrations(MIGRATION_1_2) // This might need to become MIGRATION_2_3 if 'contacts' is a new table for v3
+                .addMigrations(MIGRATION_1_2)
                 .build()
                 INSTANCE = instance
                 instance
