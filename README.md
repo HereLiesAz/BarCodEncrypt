@@ -1,6 +1,6 @@
 # BarCodEncrypt
 
-  I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode of a coupon club key fob.    
+  I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode on a coupon club key fob.    
   "What was that?" I asked.    
   "Oh," The Rock showed me his fob. "This is my password."    
   
