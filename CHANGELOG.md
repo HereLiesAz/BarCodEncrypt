@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### 0.1.0 - The Ghost in the Machine - 2025-09-06
+
+#### Added
+-   **Core Functionality:** Implemented the end-to-end message encryption and decryption flow.
+-   **`ComposeActivity`:** A dedicated screen for composing messages, selecting recipients and their keys, and setting message options (`single-use`, `ttl`).
+-   **`ContactDetailActivity`:** A screen for managing a contact's associated barcodes (keys). Allows adding new barcodes via the scanner and deleting existing ones.
+-   **`ScannerActivity`:** A fully functional barcode scanning screen using CameraX and ML Kit.
+-   **`MessageDetectionService`:** The service now actively detects messages on screen, checks for revoked single-use messages, and launches the `OverlayService`.
+-   **`OverlayService`:** Displays a tappable overlay on detected messages, handles the decryption flow, and enforces `single-use` and `ttl` options.
+-   **`ScannerManager`:** A new singleton to decouple scan requests from the UI, allowing services to request scans from the main activity.
+-   **Permissions Flow:** The `MainActivity` now checks for and guides the user to enable all necessary permissions (Accessibility, Overlay, Contacts).
+-   **Jetpack Compose UI:** All screens are now built with Jetpack Compose and Material 3.
+
+#### Fixed
+-   Corrected several bugs related to inconsistent `Intent` extra keys, ensuring reliable data passing between activities.
+
 ### 0.0.2 - The Naming of Parts - 2025-09-06
 
 #### Added

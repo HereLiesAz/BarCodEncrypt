@@ -27,10 +27,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.viewmodel.ComposeViewModel
+import kotlinx.coroutines.launch
 
 class ComposeActivity : ComponentActivity() {
 
@@ -110,6 +110,7 @@ fun ComposeScreen(
     onNavigateUp: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val barcodes by viewModel.barcodesForSelectedContact.observeAsState(emptyList())
 
     var selectedBarcode by remember { mutableStateOf<Barcode?>(null) }
@@ -199,16 +200,22 @@ fun ComposeScreen(
                 onClick = {
                     val barcode = selectedBarcode
                     if (message.isNotBlank() && barcode != null) {
-                        val options = mutableListOf<String>()
-                        if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
-                        if (isTimed) options.add("${EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
+                        coroutineScope.launch {
+                            val options = mutableListOf<String>()
+                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                            if (isTimed) options.add("${com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
 
-                        encryptedText = EncryptionManager.encrypt(
-                            plaintext = message,
-                            key = barcode.value,
-                            barcodeIdentifier = barcode.identifier,
-                            options = options
-                        )
+                            val result = viewModel.encryptMessage(
+                                plaintext = message,
+                                barcode = barcode,
+                                options = options
+                            )
+                            if (result != null) {
+                                encryptedText = result
+                            } else {
+                                Toast.makeText(context, "Encryption failed.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

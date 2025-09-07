@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
 
@@ -35,7 +37,7 @@ class ContactDetailActivity : ComponentActivity() {
     private val scanResultLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                val barcodeValue = result.data?.getStringExtra(ScannerActivity.EXTRA_SCAN_RESULT)
+                val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
                 if (contactLookupKey != null && !barcodeValue.isNullOrBlank()) {
                     viewModel.pendingScan.value = Triple(contactLookupKey!!, barcodeValue, true)
                 }
@@ -44,8 +46,8 @@ class ContactDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        contactLookupKey = intent.getStringExtra(EXTRA_CONTACT_LOOKUP_KEY)
-        contactName = intent.getStringExtra(EXTRA_CONTACT_NAME)
+        contactLookupKey = intent.getStringExtra(Constants.IntentKeys.CONTACT_LOOKUP_KEY)
+        contactName = intent.getStringExtra(Constants.IntentKeys.CONTACT_NAME)
 
         if (contactLookupKey == null || contactName == null) {
             finish()
@@ -68,11 +70,6 @@ class ContactDetailActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    companion object {
-        const val EXTRA_CONTACT_LOOKUP_KEY = "com.hereliesaz.barcodencrypt.CONTACT_LOOKUP_KEY"
-        const val EXTRA_CONTACT_NAME = "com.hereliesaz.barcodencrypt.CONTACT_NAME"
     }
 }
 
@@ -126,7 +123,11 @@ fun ContactDetailScreen(
         } else {
             LazyColumn(modifier = Modifier.padding(padding).padding(8.dp)) {
                 items(barcodes) { barcode ->
-                    BarcodeItem(barcode = barcode, onDelete = { viewModel.deleteBarcode(it) })
+                    BarcodeItem(
+                        barcode = barcode,
+                        onDelete = { viewModel.deleteBarcode(it) },
+                        onReset = { viewModel.resetCounter(it) }
+                    )
                 }
             }
         }
@@ -134,32 +135,64 @@ fun ContactDetailScreen(
 }
 
 @Composable
-fun BarcodeItem(barcode: Barcode, onDelete: (Barcode) -> Unit) {
-    var showDeleteBarcodeDialog by remember { mutableStateOf(false) }
+fun BarcodeItem(
+    barcode: Barcode,
+    onDelete: (Barcode) -> Unit,
+    onReset: (Barcode) -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     ListItem(
         headlineContent = { Text(barcode.identifier) },
-        supportingContent = { Text(barcode.value, maxLines = 1) },
+        supportingContent = {
+            Text(
+                "Counter: ${barcode.counter}\nValue: ${barcode.value}",
+                maxLines = 2,
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
         trailingContent = {
-            IconButton(onClick = { showDeleteBarcodeDialog = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+            Row {
+                IconButton(onClick = { showResetDialog = true }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset Counter")
+                }
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+                }
             }
         }
     )
 
-    if (showDeleteBarcodeDialog) {
+    if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteBarcodeDialog = false },
+            onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Barcode?") },
             text = { Text("Are you sure you want to delete the barcode '${barcode.identifier}'?") },
             confirmButton = {
                 Button(
-                    onClick = { onDelete(barcode); showDeleteBarcodeDialog = false },
+                    onClick = { onDelete(barcode); showDeleteDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteBarcodeDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset Counter?") },
+            text = { Text("Resetting the counter may expose old messages to replay attacks. Are you sure you want to proceed?") },
+            confirmButton = {
+                Button(
+                    onClick = { onReset(barcode); showResetDialog = false }
+                ) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
             }
         )
     }

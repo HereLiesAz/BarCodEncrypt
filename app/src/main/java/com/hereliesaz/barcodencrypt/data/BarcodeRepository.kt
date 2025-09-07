@@ -40,10 +40,27 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
     }
 
     /**
-     * Deletes a barcode from the database.
+     * Deletes a barcode from the.
      * @param barcode The barcode to be deleted.
      */
     suspend fun deleteBarcode(barcode: Barcode) {
         barcodeDao.deleteBarcode(barcode)
+    }
+
+    /**
+     * Updates a barcode in the database.
+     * @param barcode The barcode to update.
+     */
+    suspend fun updateBarcode(barcode: Barcode) {
+        barcodeDao.updateBarcode(barcode)
+    }
+
+    /**
+     * Gets a single barcode by its ID.
+     * @param barcodeId The ID of the barcode.
+     * @return The [Barcode] object or null if not found.
+     */
+    suspend fun getBarcode(barcodeId: Int): Barcode? {
+        return barcodeDao.getBarcode(barcodeId)
     }
 }

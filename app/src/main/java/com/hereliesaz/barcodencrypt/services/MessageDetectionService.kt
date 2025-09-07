@@ -8,8 +8,11 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.BarcodeRepository
+import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
+import com.hereliesaz.barcodencrypt.util.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,22 +22,41 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The Watcher. An omnipresent, silent observer.
- * It no longer whispers through notifications. It now summons a Poltergeist.
+ *
+ * This [AccessibilityService] is the core of the app's passive detection system. Once enabled,
+ * it listens for [AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED] events, which fire whenever
+ * the content on the screen is updated. It then recursively traverses the view hierarchy
+ * (represented by [AccessibilityNodeInfo] objects) to find text that matches the
+ * Barcodencrypt message format.
+ *
+ * When a valid message is found, it summons the [OverlayService] to handle the decryption UI.
  */
 class MessageDetectionService : AccessibilityService() {
 
-    private lateinit var repository: BarcodeRepository
+    private lateinit var barcodeRepository: BarcodeRepository
+    private lateinit var revokedMessageRepository: RevokedMessageRepository
     private lateinit var serviceScope: CoroutineScope
+
+    /**
+     * A local, in-memory cache to prevent re-processing the same message in rapid succession.
+     * This is necessary because a single user action can sometimes trigger multiple window change events.
+     * The key is the full encrypted message string, the value is the timestamp it was last seen.
+     */
     private val seenMessages = ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
-        val barcodeDao = AppDatabase.getDatabase(application).barcodeDao()
-        repository = BarcodeRepository(barcodeDao)
+        val database = AppDatabase.getDatabase(application)
+        barcodeRepository = BarcodeRepository(database.barcodeDao())
+        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         Log.d(TAG, "Watcher service has been created.")
     }
 
+    /**
+     * The entry point for all accessibility events. It filters for window content changes
+     * and begins the search for encrypted messages from the root node of the event.
+     */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             val sourceNode = event.source ?: return
@@ -43,6 +65,17 @@ class MessageDetectionService : AccessibilityService() {
         }
     }
 
+    /**
+     * Recursively traverses the view hierarchy starting from [nodeInfo], searching for text
+     * that contains the Barcodencrypt message header.
+     *
+     * For each node, it checks the text content. If a potential message is found, it's checked
+     * against the `seenMessages` cooldown and the `revokedMessageRepository` (for single-use messages).
+     * If the message is valid, it launches a coroutine to fetch the corresponding barcode from the
+     * database and summons the [OverlayService].
+     *
+     * @param nodeInfo The node to start the search from.
+     */
     private fun findEncryptedMessages(nodeInfo: AccessibilityNodeInfo?) {
         if (nodeInfo == null) return
 
@@ -57,9 +90,20 @@ class MessageDetectionService : AccessibilityService() {
                     seenMessages[fullMatch] = now
                     val parts = fullMatch.split("::")
                     if (parts.size >= 5) {
+                        val options = parts[2]
                         val identifier = parts[3]
                         serviceScope.launch {
-                            val barcode = repository.getBarcodeByIdentifier(identifier)
+                            // For single-use messages, check if they've already been used.
+                            val messageHash = EncryptionManager.sha256(fullMatch)
+                            if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
+                                revokedMessageRepository.isMessageRevoked(messageHash)
+                            ) {
+                                Log.i(TAG, "Ignoring revoked single-use message.")
+                                return@launch
+                            }
+
+                            // Find the key associated with the message's identifier.
+                            val barcode = barcodeRepository.getBarcodeByIdentifier(identifier)
                             if (barcode != null) {
                                 val bounds = Rect()
                                 nodeInfo.getBoundsInScreen(bounds)
@@ -72,6 +116,7 @@ class MessageDetectionService : AccessibilityService() {
             }
         }
 
+        // Recurse through all children of the current node.
         for (i in 0 until nodeInfo.childCount) {
             findEncryptedMessages(nodeInfo.getChild(i))
         }
@@ -91,9 +136,9 @@ class MessageDetectionService : AccessibilityService() {
         }
 
         val intent = Intent(this, OverlayService::class.java).apply {
-            putExtra(OverlayService.EXTRA_ENCRYPTED_TEXT, encryptedText)
-            putExtra(OverlayService.EXTRA_CORRECT_KEY, correctKey)
-            putExtra(OverlayService.EXTRA_BOUNDS, bounds)
+            putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
+            putExtra(Constants.IntentKeys.CORRECT_KEY, correctKey)
+            putExtra(Constants.IntentKeys.BOUNDS, bounds)
         }
         startService(intent)
     }
