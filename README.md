@@ -2,7 +2,7 @@
 
   I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode of a coupon club key fob.    
   "What was that?" I asked.    
-  "Oh," The Rock showed me the fob. "This is my password."    
+  "Oh," The Rock showed me his fob. "This is my password."    
   
 Barcodencrypt is a functional Android application for sending and receiving encrypted messages. The gimmick, the central conceit, is that the decryption key is a physical barcode. You scan it, you see the message. If you don't have the barcode, the message remains gibberish. It's security through deliberate inconvenience.
 
