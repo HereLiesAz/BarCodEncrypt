@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -122,7 +123,11 @@ fun ContactDetailScreen(
         } else {
             LazyColumn(modifier = Modifier.padding(padding).padding(8.dp)) {
                 items(barcodes) { barcode ->
-                    BarcodeItem(barcode = barcode, onDelete = { viewModel.deleteBarcode(it) })
+                    BarcodeItem(
+                        barcode = barcode,
+                        onDelete = { viewModel.deleteBarcode(it) },
+                        onReset = { viewModel.resetCounter(it) }
+                    )
                 }
             }
         }
@@ -130,32 +135,64 @@ fun ContactDetailScreen(
 }
 
 @Composable
-fun BarcodeItem(barcode: Barcode, onDelete: (Barcode) -> Unit) {
-    var showDeleteBarcodeDialog by remember { mutableStateOf(false) }
+fun BarcodeItem(
+    barcode: Barcode,
+    onDelete: (Barcode) -> Unit,
+    onReset: (Barcode) -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     ListItem(
         headlineContent = { Text(barcode.identifier) },
-        supportingContent = { Text(barcode.value, maxLines = 1) },
+        supportingContent = {
+            Text(
+                "Counter: ${barcode.counter}\nValue: ${barcode.value}",
+                maxLines = 2,
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
         trailingContent = {
-            IconButton(onClick = { showDeleteBarcodeDialog = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+            Row {
+                IconButton(onClick = { showResetDialog = true }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset Counter")
+                }
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+                }
             }
         }
     )
 
-    if (showDeleteBarcodeDialog) {
+    if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteBarcodeDialog = false },
+            onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Barcode?") },
             text = { Text("Are you sure you want to delete the barcode '${barcode.identifier}'?") },
             confirmButton = {
                 Button(
-                    onClick = { onDelete(barcode); showDeleteBarcodeDialog = false },
+                    onClick = { onDelete(barcode); showDeleteDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteBarcodeDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset Counter?") },
+            text = { Text("Are you sure you want to reset the message counter for '${barcode.identifier}'? This may be needed if the key gets out of sync, but could expose old messages to replay attacks if done improperly.") },
+            confirmButton = {
+                Button(
+                    onClick = { onReset(barcode); showResetDialog = false }
+                ) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
             }
         )
     }

@@ -3,7 +3,9 @@ package com.hereliesaz.barcodencrypt.crypto
 import android.util.Base64
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.security.SecureRandom
 import javax.crypto.Cipher
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -31,11 +33,68 @@ object EncryptionManager {
     const val OPTION_TTL_PREFIX = "ttl="
 
     /**
-     * The format of the message header.
-     * `BCE` is the magic identifier, followed by version, options, and barcode identifier.
-     * The final element is the Base64-encoded payload.
+     * The format of the v1 message header.
      */
-    private const val HEADER_FORMAT = "BCE::v1::%s::%s::"
+    private const val HEADER_FORMAT_V1 = "BCE::v1::%s::%s::"
+
+    /**
+     * The format of the v2 message header, which includes a counter for the rolling key.
+     */
+    private const val HEADER_FORMAT_V2 = "BCE::v2::%s::%s::%d::"
+
+    private const val HMAC_ALGORITHM = "HmacSHA256"
+    private const val SALT_SIZE = 16 // 128 bits
+
+    /**
+     * Generates a cryptographically secure random salt.
+     * @return A [ByteArray] containing the salt.
+     */
+    fun createSalt(): ByteArray {
+        val salt = ByteArray(SALT_SIZE)
+        SecureRandom().nextBytes(salt)
+        return salt
+    }
+
+    /**
+     * The HKDF-Extract function.
+     * @param salt The salt value (a non-secret random value).
+     * @param ikm The input keying material (the secret from the barcode).
+     * @return The pseudorandom key (PRK).
+     */
+    private fun hkdfExtract(salt: ByteArray, ikm: String): SecretKeySpec {
+        val mac = Mac.getInstance(HMAC_ALGORITHM)
+        mac.init(SecretKeySpec(salt, HMAC_ALGORITHM))
+        val prk = mac.doFinal(ikm.toByteArray(StandardCharsets.UTF_8))
+        return SecretKeySpec(prk, HMAC_ALGORITHM)
+    }
+
+    /**
+     * The HKDF-Expand function.
+     * @param prk The pseudorandom key from the extract step.
+     * @param info The context-specific information.
+     * @param length The desired length of the output key in bytes.
+     * @return The output keying material (OKM).
+     */
+    private fun hkdfExpand(prk: SecretKeySpec, info: String, length: Int): ByteArray {
+        val mac = Mac.getInstance(HMAC_ALGORITHM)
+        mac.init(prk)
+        val infoBytes = info.toByteArray(StandardCharsets.UTF_8)
+        val result = ByteArray(length)
+        var bytesRemaining = length
+        var i = 1
+        var t = ByteArray(0)
+        while (bytesRemaining > 0) {
+            mac.update(t)
+            mac.update(infoBytes)
+            mac.update(i.toByte())
+            t = mac.doFinal()
+            val toCopy = minOf(bytesRemaining, t.size)
+            System.arraycopy(t, 0, result, length - bytesRemaining, toCopy)
+            bytesRemaining -= toCopy
+            i++
+        }
+        return result
+    }
 
     /**
      * Hashes a string using SHA-256.
@@ -56,42 +115,36 @@ object EncryptionManager {
      * @param key The input string, typically the value of a barcode.
      * @return A [SecretKeySpec] suitable for use with AES.
      */
-    private fun deriveKey(key: String): SecretKeySpec {
+    private fun deriveKeyV1(key: String): SecretKeySpec {
         val digest = MessageDigest.getInstance(KEY_DERIVATION_ALGORITHM)
         val keyBytes = digest.digest(key.toByteArray(StandardCharsets.UTF_8))
         return SecretKeySpec(keyBytes, ALGORITHM)
     }
 
-    /**
-     * Encrypts a plaintext string into the Barcodencrypt message format.
-     * The process involves:
-     * 1. Deriving a secret key from the provided [key] string.
-     * 2. Generating a random Initialization Vector (IV).
-     * 3. Encrypting the plaintext with AES/GCM.
-     * 4. Prepending the IV to the ciphertext.
-     * 5. Base64-encoding the IV+ciphertext payload.
-     * 6. Prepending the full message header.
-     *
-     * @param plaintext The message to encrypt.
-     * @param key The secret key string (from the barcode) to use for encryption.
-     * @param barcodeIdentifier The public identifier of the key, which gets embedded in the header.
-     * @param options A list of options, such as [OPTION_SINGLE_USE] or [OPTION_TTL_PREFIX].
-     * @return The full encrypted message string, or an error message if encryption fails.
-     */
-    fun encrypt(plaintext: String, key: String, barcodeIdentifier: String, options: List<String> = emptyList()): String {
+    fun encrypt(
+        plaintext: String,
+        ikm: String,
+        salt: ByteArray,
+        barcodeIdentifier: String,
+        counter: Long,
+        options: List<String> = emptyList()
+    ): String {
         return try {
-            val secretKey = deriveKey(key)
+            val prk = hkdfExtract(salt, ikm)
+            val info = "BCEv2|msg|$counter"
+            val messageKey = hkdfExpand(prk, info, 32)
+            val secretKey = SecretKeySpec(messageKey, ALGORITHM)
+
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            // GCM is most secure with a random IV for every encryption.
             val iv = ByteArray(GCM_IV_LENGTH)
-            java.security.SecureRandom().nextBytes(iv)
+            SecureRandom().nextBytes(iv)
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
             val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
-            // Prepend the IV to the ciphertext. It's needed for decryption and is not a secret.
-            val ivAndCiphertext = iv + encryptedBytes
-            val base64Payload = Base64.encodeToString(ivAndCiphertext, Base64.DEFAULT)
-            val header = HEADER_FORMAT.format(options.joinToString(","), barcodeIdentifier)
+
+            val saltAndIvAndCiphertext = salt + iv + encryptedBytes
+            val base64Payload = Base64.encodeToString(saltAndIvAndCiphertext, Base64.DEFAULT)
+            val header = HEADER_FORMAT_V2.format(options.joinToString(","), barcodeIdentifier, counter)
             header + base64Payload
         } catch (e: Exception) {
             e.printStackTrace()
@@ -99,20 +152,67 @@ object EncryptionManager {
         }
     }
 
-    /**
-     * Decrypts a Barcodencrypt message string.
-     * The process involves:
-     * 1. Parsing the message header and extracting the Base64 payload.
-     * 2. Decoding the payload to get the IV and the ciphertext.
-     * 3. Deriving the secret key from the provided [key] string.
-     * 4. Decrypting the ciphertext with AES/GCM using the key and IV.
-     *
-     * @param ciphertext The full encrypted message string.
-     * @param key The secret key string (from the barcode) to use for decryption.
-     * @return The decrypted plaintext string, or `null` if decryption fails for any reason
-     *         (e.g., incorrect key, tampered message, incorrect format).
-     */
-    fun decrypt(ciphertext: String, key: String): String? {
+    private fun encryptV1(plaintext: String, key: String, barcodeIdentifier: String, options: List<String> = emptyList()): String {
+        return try {
+            val secretKey = deriveKeyV1(key)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            // GCM is most secure with a random IV for every encryption.
+            val iv = ByteArray(GCM_IV_LENGTH)
+            SecureRandom().nextBytes(iv)
+            val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
+            val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
+            // Prepend the IV to the ciphertext. It's needed for decryption and is not a secret.
+            val ivAndCiphertext = iv + encryptedBytes
+            val base64Payload = Base64.encodeToString(ivAndCiphertext, Base64.DEFAULT)
+            val header = HEADER_FORMAT_V1.format(options.joinToString(","), barcodeIdentifier)
+            header + base64Payload
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Encryption Error: ${e.message}"
+        }
+    }
+
+    fun decrypt(ciphertext: String, ikm: String): String? {
+        val parts = ciphertext.split("::")
+        if (parts.size < 5 || parts[0] != "BCE") return null
+
+        return when (val version = parts.getOrNull(1)) {
+            "v1" -> decryptV1(ciphertext, ikm)
+            "v2" -> decryptV2(ciphertext, ikm, parts)
+            else -> null // Unknown version
+        }
+    }
+
+    private fun decryptV2(ciphertext: String, ikm: String, parts: List<String>): String? {
+        return try {
+            if (parts.size < 6) return null
+            val counter = parts[4].toLongOrNull() ?: return null
+            val base64Payload = parts.last()
+            val saltAndIvAndCiphertext = Base64.decode(base64Payload, Base64.DEFAULT)
+
+            if (saltAndIvAndCiphertext.size < SALT_SIZE + GCM_IV_LENGTH) return null
+            val salt = saltAndIvAndCiphertext.copyOfRange(0, SALT_SIZE)
+            val iv = saltAndIvAndCiphertext.copyOfRange(SALT_SIZE, SALT_SIZE + GCM_IV_LENGTH)
+            val encryptedBytes = saltAndIvAndCiphertext.copyOfRange(SALT_SIZE + GCM_IV_LENGTH, saltAndIvAndCiphertext.size)
+
+            val prk = hkdfExtract(salt, ikm)
+            val info = "BCEv2|msg|$counter"
+            val messageKey = hkdfExpand(prk, info, 32)
+            val secretKey = SecretKeySpec(messageKey, ALGORITHM)
+
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            String(decryptedBytes, StandardCharsets.UTF_8)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun decryptV1(ciphertext: String, key: String): String? {
         return try {
             val parts = ciphertext.split("::")
             if (parts.size < 5 || parts[0] != "BCE") return null
@@ -121,7 +221,7 @@ object EncryptionManager {
             if (ivAndCiphertext.size < GCM_IV_LENGTH) return null
             val iv = ivAndCiphertext.copyOfRange(0, GCM_IV_LENGTH)
             val encryptedBytes = ivAndCiphertext.copyOfRange(GCM_IV_LENGTH, ivAndCiphertext.size)
-            val secretKey = deriveKey(key)
+            val secretKey = deriveKeyV1(key)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
