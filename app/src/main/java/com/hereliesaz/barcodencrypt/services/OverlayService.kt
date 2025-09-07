@@ -38,26 +38,12 @@ import com.hereliesaz.barcodencrypt.util.ScannerManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * The Poltergeist.
- *
- * This service is responsible for displaying and managing the overlay UI that appears on top of
- * a detected encrypted message. It is started by [MessageDetectionService].
- *
- * The overlay is a [ComposeView] managed by the [WindowManager]. It handles its own state
- * (initial, success, failure), initiates the scan via [ScannerManager], and then updates its
- * content with the result of the decryption. It is also responsible for enforcing `single-use`
- * and `ttl` message options.
- */
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private var composeView: ComposeView? = null
-
-    /** A custom lifecycle owner is required to host a ComposeView in a Service window. */
     private val lifecycleOwner = ServiceLifecycleOwner()
-
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var correctKey: String? = null
     private var encryptedText: String? = null
@@ -72,6 +58,12 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_DECRYPT) {
+            val scannedKey = intent.getStringExtra(EXTRA_SCANNED_KEY)
+            handleScannedKey(scannedKey)
+            return START_NOT_STICKY
+        }
+
         encryptedText = intent?.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
         correctKey = intent?.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
         val bounds = intent?.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
@@ -173,30 +165,17 @@ class OverlayService : Service() {
 
     companion object {
         const val TAG = "OverlayService"
+        const val ACTION_DECRYPT = "com.hereliesaz.barcodencrypt.services.action.DECRYPT"
+        const val EXTRA_SCANNED_KEY = "com.hereliesaz.barcodencrypt.services.extra.SCANNED_KEY"
     }
 }
 
-/**
- * Represents the different states of the overlay UI.
- */
 sealed class OverlayState {
-    /** The initial state, before a scan has been attempted. The UI prompts the user to tap. */
     object Initial : OverlayState()
-    /** The state after a successful decryption. The UI shows the plaintext. */
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
-    /** The state after a failed decryption. The UI shows an error. */
     object Failure : OverlayState()
 }
 
-/**
- * The main Composable function for the overlay's content.
- * It observes the [OverlayState] and displays the appropriate UI.
- * It also handles the auto-removal of the overlay after a delay on success or failure.
- *
- * @param state The current [OverlayState] to render.
- * @param onClick The action to perform when the overlay is clicked in its `Initial` state.
- * @param onFinish The action to perform when the overlay has finished its lifecycle and should be removed.
- */
 @Composable
 fun OverlayContent(
     state: OverlayState,
@@ -272,4 +251,3 @@ fun OverlayContent(
         }
     }
 }
-
