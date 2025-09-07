@@ -12,7 +12,8 @@ import androidx.room.PrimaryKey
  * @param id The primary key, a meaningless number for the Scribe's internal use.
  * @param contactLookupKey The persistent key that identifies a contact in the Android system. This is our link to a real person.
  * @param identifier The human-readable name for this key (e.g., "Work Phone QR").
- * @param value The raw, sacred text of the barcode itself.
+ * @param value The raw, sacred text of the barcode itself. This is the Initial Keying Material (IKM).
+ * @param counter The message counter for the rolling key. Incremented for each encrypted message.
  */
 @Entity(
     tableName = "barcodes",
@@ -23,5 +24,6 @@ data class Barcode(
     val id: Int = 0,
     val contactLookupKey: String,
     val identifier: String,
-    val value: String
+    val value: String,
+    val counter: Long = 0L
 )
