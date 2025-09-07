@@ -25,6 +25,7 @@ import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.services.MessageDetectionService
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.ContactDetailActivity
+import com.hereliesaz.barcodencrypt.ui.ScannerActivity // Added import for ScannerActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
