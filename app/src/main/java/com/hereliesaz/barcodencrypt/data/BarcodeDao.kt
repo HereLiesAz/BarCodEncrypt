@@ -48,4 +48,20 @@ interface BarcodeDao {
      */
     @Delete
     suspend fun deleteBarcode(barcode: Barcode)
+
+    /**
+     * Advances the message counter for a given barcode.
+     *
+     * @param barcodeId The ID of the barcode to update.
+     */
+    @Query("UPDATE barcodes SET counter = counter + 1 WHERE id = :barcodeId")
+    suspend fun incrementCounter(barcodeId: Int)
+
+    /**
+     * Resets the message counter for a given barcode back to zero.
+     *
+     * @param barcodeId The ID of the barcode to reset.
+     */
+    @Query("UPDATE barcodes SET counter = 0 WHERE id = :barcodeId")
+    suspend fun resetCounter(barcodeId: Int)
 }
