@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
 
@@ -35,7 +36,7 @@ class ContactDetailActivity : ComponentActivity() {
     private val scanResultLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                val barcodeValue = result.data?.getStringExtra(ScannerActivity.EXTRA_SCAN_RESULT)
+                val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
                 if (contactLookupKey != null && !barcodeValue.isNullOrBlank()) {
                     viewModel.pendingScan.value = Triple(contactLookupKey!!, barcodeValue, true)
                 }
@@ -44,8 +45,8 @@ class ContactDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        contactLookupKey = intent.getStringExtra(EXTRA_CONTACT_LOOKUP_KEY)
-        contactName = intent.getStringExtra(EXTRA_CONTACT_NAME)
+        contactLookupKey = intent.getStringExtra(Constants.IntentKeys.CONTACT_LOOKUP_KEY)
+        contactName = intent.getStringExtra(Constants.IntentKeys.CONTACT_NAME)
 
         if (contactLookupKey == null || contactName == null) {
             finish()
@@ -68,11 +69,6 @@ class ContactDetailActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    companion object {
-        const val EXTRA_CONTACT_LOOKUP_KEY = "com.hereliesaz.barcodencrypt.CONTACT_LOOKUP_KEY"
-        const val EXTRA_CONTACT_NAME = "com.hereliesaz.barcodencrypt.CONTACT_NAME"
     }
 }
 
