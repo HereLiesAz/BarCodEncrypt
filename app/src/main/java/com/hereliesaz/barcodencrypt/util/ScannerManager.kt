@@ -5,24 +5,34 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * The Central Nerve Ganglion.
+ *
  * A singleton object that decouples the request for a barcode scan from the Activity
- * that must perform it. This prevents the spontaneous growth of parasitic structures
- * like the ScannerTrampolineActivity.
+ * that must perform it. This is crucial for components that run outside of an Activity context
+ * (like a [android.app.Service]) but need to launch a UI-based scanner.
+ *
+ * It works using a combination of a [MutableSharedFlow] to broadcast the request and a simple
+ * callback to return the result.
+ *
+ * This architecture prevents the spontaneous growth of parasitic structures like the `ScannerTrampolineActivity`.
  */
 object ScannerManager {
 
-    // A SharedFlow is used to broadcast scan requests to any listening collector.
     private val _requests = MutableSharedFlow<Unit>()
+    /**
+     * A hot flow that emits a value whenever a barcode scan is requested.
+     * An Activity with a UI context should collect this flow and launch the scanner UI.
+     */
     val requests = _requests.asSharedFlow()
 
-    // A simple callback to deliver the result back to the waiting process.
     private var resultCallback: ((String?) -> Unit)? = null
 
     /**
      * A component (like an OverlayService) calls this to initiate a scan.
-     * It posts to the flow and provides a callback to receive the result.
+     * It stores the [onResult] callback and emits a new value to the [requests] flow,
+     * which triggers any listening UI to launch the scanner.
      *
-     * @param onResult The function to execute when the scanner returns a result.
+     * @param onResult The function to execute when the scanner returns a result. The result
+     * is a [String] containing the barcode value, or null if the scan was cancelled.
      */
     suspend fun requestScan(onResult: (String?) -> Unit) {
         resultCallback = onResult
@@ -30,10 +40,11 @@ object ScannerManager {
     }
 
     /**
-     * The Activity (the primary somatic structure) calls this to deliver the scan result.
-     * It invokes the stored callback.
+     * The Activity that launched the scanner calls this to deliver the scan result.
+     * It invokes the stored [resultCallback] and then clears it to prevent stale references
+     * and memory leaks.
      *
-     * @param result The scanned barcode value, or null if cancelled.
+     * @param result The scanned barcode value, or null if the scan was cancelled.
      */
     fun onScanResult(result: String?) {
         resultCallback?.invoke(result)
