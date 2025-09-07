@@ -1,4 +1,4 @@
-# Barcodencrypt
+# BarCodEncrypt
 
   I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode of a coupon club key fob.    
   "What was that?" I asked.    
