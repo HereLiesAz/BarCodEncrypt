@@ -14,7 +14,7 @@ class RevokedMessageRepository(private val revokedMessageDao: RevokedMessageDao)
      * @param messageHash The SHA-256 hash of the message to blacklist.
      */
     suspend fun revokeMessage(messageHash: String) {
-        revokedMessageDao.insertRevokedMessage(RevokeMessage(messageHash))
+        revokedMessageDao.insert(RevokedMessage(messageHash))
     }
 
     /**

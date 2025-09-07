@@ -131,6 +131,9 @@ class MainActivity : ComponentActivity() {
                         } else {
                             contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                         }
+                    },
+                    onSettings = {
+                        startActivity(Intent(this, com.hereliesaz.barcodencrypt.ui.SettingsActivity::class.java))
                     }
                 )
             }
@@ -188,7 +191,8 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     viewModel: MainViewModel,
     onRequestNotificationPermission: () -> Unit,
-    onManageContactKeys: () -> Unit
+    onManageContactKeys: () -> Unit,
+    onSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val serviceEnabled by viewModel.serviceStatus.observeAsState(initial = false)
@@ -237,6 +241,12 @@ fun MainScreen(
 
             OutlinedButton(onClick = onManageContactKeys) {
                 Text("Manage Contact Keys")
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedButton(onClick = onSettings) {
+                Text("Settings")
             }
         }
     }

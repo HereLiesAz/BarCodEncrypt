@@ -59,5 +59,6 @@
     <string name="single_use_message">Single-Use Message (self-destructs after one successful decryption)</string>
     <string name="timed_message">Timed Message</string>
     <string name="duration_seconds">Duration (s)</string>
+    <string name="settings">Settings</string>
 </resources>
 
