@@ -61,9 +61,6 @@ class OverlayService : Service() {
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var correctKey: String? = null
     private var encryptedText: String? = null
-    private var overlayType: String? = null
-    private var nodeId: String? = null
-
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -75,76 +72,43 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        overlayType = intent?.getStringExtra(Constants.IntentKeys.OVERLAY_TYPE)
+        encryptedText = intent?.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
+        correctKey = intent?.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
         val bounds = intent?.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
 
-        if (bounds == null || overlayType == null) {
+        if (encryptedText == null || correctKey == null || bounds == null) {
             stopSelf()
             return START_NOT_STICKY
         }
-
-        when (overlayType) {
-            Constants.OverlayTypes.TYPE_MESSAGE -> {
-                encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
-                correctKey = intent.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
-                if (encryptedText == null || correctKey == null) {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-                overlayState.value = OverlayState.Initial
-            }
-            Constants.OverlayTypes.TYPE_PASSWORD -> {
-                nodeId = intent.getStringExtra(Constants.IntentKeys.NODE_ID)
-                if (nodeId == null) {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-                overlayState.value = OverlayState.PasswordScan
-            }
-        }
-
         createOverlay(bounds)
         return START_NOT_STICKY
     }
 
     private fun handleScannedKey(scannedKey: String?) {
-        if (scannedKey == null) {
-            overlayState.value = OverlayState.Failure
-            return
-        }
+        val fullEncryptedText = encryptedText ?: return
 
-        when (overlayType) {
-            Constants.OverlayTypes.TYPE_MESSAGE -> {
-                val fullEncryptedText = encryptedText ?: return
-                if (scannedKey == correctKey) {
-                    val decrypted = EncryptionManager.decrypt(fullEncryptedText, scannedKey)
-                    val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
-                    val ttlString = options.split(',').find { it.startsWith(EncryptionManager.OPTION_TTL_PREFIX) }
-                    val ttl = ttlString?.removePrefix(EncryptionManager.OPTION_TTL_PREFIX)?.toLongOrNull()
+        if (scannedKey != null && scannedKey == correctKey) {
+            val decrypted = EncryptionManager.decrypt(fullEncryptedText, scannedKey)
 
-                    overlayState.value = OverlayState.Success(decrypted ?: "Decryption failed.", ttl)
+            if (decrypted != null) {
+                val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
+                val ttlString = options.split(',').find { it.startsWith(EncryptionManager.OPTION_TTL_PREFIX) }
+                val ttl = ttlString?.removePrefix(EncryptionManager.OPTION_TTL_PREFIX)?.toLongOrNull()
 
-                    if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
-                        lifecycleOwner.lifecycleScope.launch {
-                            val messageHash = EncryptionManager.sha256(fullEncryptedText)
-                            revokedMessageRepository.revokeMessage(messageHash)
-                            Log.i(TAG, "Single-use message has been revoked.")
-                        }
+                overlayState.value = OverlayState.Success(decrypted, ttl)
+
+                if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
+                    lifecycleOwner.lifecycleScope.launch {
+                        val messageHash = EncryptionManager.sha256(fullEncryptedText)
+                        revokedMessageRepository.revokeMessage(messageHash)
+                        Log.i(TAG, "Single-use message has been revoked.")
                     }
-
-                } else {
-                    overlayState.value = OverlayState.Failure
                 }
+            } else {
+                overlayState.value = OverlayState.Failure
             }
-            Constants.OverlayTypes.TYPE_PASSWORD -> {
-                val intent = Intent().apply {
-                    action = Constants.IntentKeys.PASTE_PASSWORD_ACTION
-                    putExtra(Constants.IntentKeys.NODE_ID, nodeId)
-                    putExtra(Constants.IntentKeys.SCAN_RESULT, scannedKey)
-                }
-                sendBroadcast(intent)
-                overlayState.value = OverlayState.PasswordInput(scannedKey)
-            }
+        } else {
+            overlayState.value = OverlayState.Failure
         }
     }
 
@@ -157,7 +121,7 @@ class OverlayService : Service() {
             bounds.left,
             bounds.top,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_SECURE,
             PixelFormat.TRANSLUCENT
         )
 
@@ -218,18 +182,10 @@ class OverlayService : Service() {
 sealed class OverlayState {
     /** The initial state, before a scan has been attempted. The UI prompts the user to tap. */
     object Initial : OverlayState()
-
     /** The state after a successful decryption. The UI shows the plaintext. */
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
-
     /** The state after a failed decryption. The UI shows an error. */
     object Failure : OverlayState()
-
-    /** The state when the overlay is shown for a password field. */
-    object PasswordScan : OverlayState()
-
-    /** The state after a barcode has been scanned for a password field. */
-    data class PasswordInput(val text: String) : OverlayState()
 }
 
 /**
@@ -251,63 +207,67 @@ fun OverlayContent(
     var countdown by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state) {
-        when (state) {
-            is OverlayState.Success -> {
-                if (state.ttl != null) {
-                    countdown = state.ttl
-                    while (countdown!! > 0) {
-                        delay(1000)
-                        countdown = countdown!! - 1
-                    }
-                    visible = false
-                    onFinish()
-                } else {
-                    delay(5000) // Default linger for non-timed messages
-                    visible = false
-                    onFinish()
+        if (state is OverlayState.Success) {
+            if (state.ttl != null) {
+                countdown = state.ttl
+                while (countdown!! > 0) {
+                    delay(1000)
+                    countdown = countdown!! - 1
                 }
-            }
-            is OverlayState.Failure -> {
-                delay(3000) // Shorter linger for failure
+                visible = false
+                onFinish()
+            } else {
+                delay(5000) // Default linger for non-timed messages
                 visible = false
                 onFinish()
             }
-            is OverlayState.PasswordInput -> {
-                delay(2000) // Linger for 2 seconds to show success
-                visible = false
-                onFinish()
-            }
-            else -> { /* No-op for other states */ }
+        } else if (state is OverlayState.Failure) {
+            delay(3000) // Shorter linger for failure
+            visible = false
+            onFinish()
         }
     }
 
     if (visible) {
         Box(
             modifier = Modifier
-                .clickable(enabled = state is OverlayState.Initial || state is OverlayState.PasswordScan, onClick = onClick)
+                .clickable(enabled = state is OverlayState.Initial, onClick = onClick)
                 .border(2.dp, if(state is OverlayState.Failure) DisabledRed else Color.Yellow.copy(alpha = 0.7f))
                 .background(
                     when (state) {
-                        is OverlayState.Initial, is OverlayState.PasswordScan -> Color.Yellow.copy(alpha = 0.2f)
-                        is OverlayState.Success, is OverlayState.PasswordInput -> Color.Green.copy(alpha = 0.3f)
+                        is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
+                        is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
                         is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
                     }
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             when (state) {
-                is OverlayState.Initial -> Text("Tap to Decrypt", color = Color.White)
-                is OverlayState.PasswordScan -> Text("Scan Password", color = Color.White)
+                is OverlayState.Initial -> {
+                    Text(
+                        "Tap to Decrypt",
+                        color = Color.White
+                    )
+                }
                 is OverlayState.Success -> {
                     val text = if (countdown != null) {
                         "${state.plaintext}\n(Vanishes in $countdown...)"
                     } else {
                         state.plaintext
                     }
-                    Text(text, color = Color.White, textAlign = TextAlign.Center)
+                    Text(
+                        text,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
                 }
-                is OverlayState.Failure -> Text("Incorrect Key", color = Color.White, textAlign = TextAlign.Center)
-                is OverlayState.PasswordInput -> Text("Password Set!", color = Color.White, textAlign = TextAlign.Center)
+                is OverlayState.Failure -> {
+                    Text(
+                        "Incorrect Key",
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

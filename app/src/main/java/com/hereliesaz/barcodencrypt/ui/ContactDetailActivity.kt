@@ -34,6 +34,16 @@ class ContactDetailActivity : ComponentActivity() {
     private var contactLookupKey: String? = null
     private var contactName: String? = null
 
+    private val scanResultLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
+                if (contactLookupKey != null && !barcodeValue.isNullOrBlank()) {
+                    viewModel.pendingScan.value = Triple(contactLookupKey!!, barcodeValue, true)
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         contactLookupKey = intent.getStringExtra(Constants.IntentKeys.CONTACT_LOOKUP_KEY)
@@ -52,7 +62,11 @@ class ContactDetailActivity : ComponentActivity() {
                 ContactDetailScreen(
                     viewModel = viewModel,
                     contactName = contactName!!,
-                    onNavigateUp = { finish() }
+                    onNavigateUp = { finish() },
+                    onLaunchScanner = {
+                        val intent = Intent(this, ScannerActivity::class.java)
+                        scanResultLauncher.launch(intent)
+                    }
                 )
             }
         }
@@ -64,9 +78,26 @@ class ContactDetailActivity : ComponentActivity() {
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     contactName: String,
-    onNavigateUp: () -> Unit
+    onNavigateUp: () -> Unit,
+    onLaunchScanner: () -> Unit
 ) {
     val barcodes by viewModel.barcodes.observeAsState(emptyList())
+
+    val pendingScan by viewModel.pendingScan.observeAsState(initial = Triple("", "", false))
+    if (pendingScan.third) {
+        AddBarcodeIdentifierDialog(
+            onDismiss = { viewModel.pendingScan.value = Triple("", "", false) },
+            onConfirm = { identifier ->
+                val newBarcode = Barcode(
+                    contactLookupKey = pendingScan.first,
+                    identifier = identifier,
+                    value = pendingScan.second
+                )
+                viewModel.insertBarcode(newBarcode)
+                viewModel.pendingScan.value = Triple("", "", false)
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -78,6 +109,11 @@ fun ContactDetailScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onLaunchScanner) {
+                Icon(Icons.Default.Add, contentDescription = "Add Barcode")
+            }
         }
     ) { padding ->
         if (barcodes.isEmpty()) {
@@ -149,7 +185,7 @@ fun BarcodeItem(
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text("Reset Counter?") },
-            text = { Text("Are you sure you want to reset the message counter for '${barcode.identifier}'? This may be needed if the key gets out of sync, but could expose old messages to replay attacks if done improperly.") },
+            text = { Text("Resetting the counter may expose old messages to replay attacks. Are you sure you want to proceed?") },
             confirmButton = {
                 Button(
                     onClick = { onReset(barcode); showResetDialog = false }

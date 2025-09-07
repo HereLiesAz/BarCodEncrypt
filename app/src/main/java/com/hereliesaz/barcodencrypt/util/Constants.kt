@@ -16,17 +16,5 @@ object Constants {
         const val ENCRYPTED_TEXT = "com.hereliesaz.barcodencrypt.ENCRYPTED_TEXT"
         const val CORRECT_KEY = "com.hereliesaz.barcodencrypt.CORRECT_KEY"
         const val BOUNDS = "com.hereliesaz.barcodencrypt.BOUNDS"
-        const val OVERLAY_TYPE = "com.hereliesaz.barcodencrypt.OVERLAY_TYPE"
-        const val NODE_ID = "com.hereliesaz.barcodencrypt.NODE_ID"
-        const val PASTE_PASSWORD_ACTION = "com.hereliesaz.barcodencrypt.action.PASTE_PASSWORD"
-    }
-
-    /**
-     * Defines the different types of overlays that can be displayed. This is used by the
-     * OverlayService to determine which UI to show.
-     */
-    object OverlayTypes {
-        const val TYPE_MESSAGE = "message"
-        const val TYPE_PASSWORD = "password"
     }
 }

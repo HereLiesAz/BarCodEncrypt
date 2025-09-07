@@ -6,6 +6,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 
 /**
  * The Data Access Object for Barcodes. The Scribe's direct interface with its archives.
@@ -50,18 +51,17 @@ interface BarcodeDao {
     suspend fun deleteBarcode(barcode: Barcode)
 
     /**
-     * Advances the message counter for a given barcode.
-     *
-     * @param barcodeId The ID of the barcode to update.
+     * Updates an existing barcode. Used for incrementing or resetting the counter.
+     * @param barcode The [Barcode] object with the updated fields.
      */
-    @Query("UPDATE barcodes SET counter = counter + 1 WHERE id = :barcodeId")
-    suspend fun incrementCounter(barcodeId: Int)
+    @Update
+    suspend fun updateBarcode(barcode: Barcode)
 
     /**
-     * Resets the message counter for a given barcode back to zero.
-     *
-     * @param barcodeId The ID of the barcode to reset.
+     * Retrieves a single barcode by its primary key.
+     * @param barcodeId The ID of the barcode to retrieve.
+     * @return The [Barcode] if found, otherwise null.
      */
-    @Query("UPDATE barcodes SET counter = 0 WHERE id = :barcodeId")
-    suspend fun resetCounter(barcodeId: Int)
+    @Query("SELECT * FROM barcodes WHERE id = :barcodeId")
+    suspend fun getBarcode(barcodeId: Int): Barcode?
 }
