@@ -3,7 +3,6 @@ package com.hereliesaz.barcodencrypt.crypto
 import android.util.Base64
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
@@ -153,26 +152,6 @@ object EncryptionManager {
     }
 
     private fun encryptV1(plaintext: String, key: String, barcodeIdentifier: String, options: List<String> = emptyList()): String? {
-        return try {
-            val secretKey = deriveKeyV1(key)
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            // GCM is most secure with a random IV for every encryption.
-            val iv = ByteArray(GCM_IV_LENGTH)
-            SecureRandom().nextBytes(iv)
-            val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
-            val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
-            val saltAndIvAndCiphertext = salt + iv + encryptedBytes
-            val base64Payload = Base64.encodeToString(saltAndIvAndCiphertext, Base64.DEFAULT)
-            val header = HEADER_FORMAT_V2.format(options.joinToString(","), barcodeIdentifier, counter)
-            header + base64Payload
-        } catch (e: Exception) {
-            e.printStackTrace()
-            "Encryption Error: ${e.message}"
-        }
-    }
-
-    private fun encryptV1(plaintext: String, key: String, barcodeIdentifier: String, options: List<String> = emptyList()): String {
         return try {
             val secretKey = deriveKeyV1(key)
             val cipher = Cipher.getInstance(TRANSFORMATION)

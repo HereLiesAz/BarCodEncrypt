@@ -4,45 +4,47 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+// Explicit imports for entities being used
+import com.hereliesaz.barcodencrypt.data.Barcode
+import com.hereliesaz.barcodencrypt.data.Contact
+// com.hereliesaz.barcodencrypt.data.RevokeMessage is temporarily removed
 
-/**
- * The Scribe's archive. The Room database.
- * It no longer knows of 'Contacts', only of the sigils ('Barcodes') themselves.
- * It is a singleton, a lonely and singular vault of secrets.
- */
-@Database(entities = [Barcode::class, RevokedMessage::class], version = 2, exportSchema = false)
+@Database(entities = [Contact::class, Barcode::class], version = 2, exportSchema = false) // RevokeMessage::class removed
 abstract class AppDatabase : RoomDatabase() {
 
-    /**
-     * @return The Data Access Object for barcodes.
-     */
+    abstract fun contactDao(): ContactDao
     abstract fun barcodeDao(): BarcodeDao
-
-    /**
-     * @return The Data Access Object for the revoked message blacklist.
-     */
-    abstract fun revokedMessageDao(): RevokedMessageDao
+    // abstract fun revokedMessageDao(): RevokedMessageDao // Temporarily removed
 
     companion object {
-        // A volatile instance ensures that the value is always up-to-date and the same
-        // to all execution threads.
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        /**
-         * Returns the singleton instance of the database.
-         * If it doesn't exist, it creates it in a thread-safe way.
-         *
-         * @param context The application context.
-         * @return The singleton [AppDatabase] instance.
-         */
+        val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create contacts table 
+                db.execSQL("CREATE TABLE IF NOT EXISTS `contacts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `lookupKey` TEXT NOT NULL, `name` TEXT NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_contacts_lookupKey` ON `contacts` (`lookupKey`)")
+
+                // Add the 'counter' column to the 'barcodes' table.
+                db.execSQL("ALTER TABLE barcodes ADD COLUMN counter INTEGER NOT NULL DEFAULT 0")
+                
+                // Create the new 'revoked_messages' table - Temporarily removed.
+                // db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "barcodencrypt_database"
-                ).fallbackToDestructiveMigration().build()
+                )
+                .addMigrations(MIGRATION_1_2)
+                .build()
                 INSTANCE = instance
                 instance
             }

@@ -9,7 +9,7 @@ import androidx.room.Query
 interface RevokedMessageDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertRevokedMessage(revokedMessage: RevokedMessage)
+    suspend fun insertRevokedMessage(revokedMessage: RevokeMessage)
 
     @Query("SELECT * FROM revoked_messages WHERE messageHash = :messageHash LIMIT 1")
     suspend fun getRevokedMessage(messageHash: String): RevokedMessage?

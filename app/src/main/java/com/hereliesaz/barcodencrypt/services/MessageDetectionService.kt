@@ -1,13 +1,9 @@
 package com.hereliesaz.barcodencrypt.services
 
 import android.accessibilityservice.AccessibilityService
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Rect
 import android.os.Build
-import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -17,7 +13,6 @@ import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.BarcodeRepository
 import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.Constants.OverlayTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,7 +43,6 @@ class MessageDetectionService : AccessibilityService() {
      * The key is the full encrypted message string, the value is the timestamp it was last seen.
      */
     private val seenMessages = ConcurrentHashMap<String, Long>()
-    private val seenPasswordFields = ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -57,9 +51,6 @@ class MessageDetectionService : AccessibilityService() {
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         Log.d(TAG, "Watcher service has been created.")
-
-        val filter = IntentFilter(Constants.IntentKeys.PASTE_PASSWORD_ACTION)
-        registerReceiver(passwordPasteReceiver, filter)
     }
 
     /**
@@ -67,29 +58,11 @@ class MessageDetectionService : AccessibilityService() {
      * and begins the search for encrypted messages from the root node of the event.
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val sourceNode = event?.source ?: return
-
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> findEncryptedMessages(sourceNode)
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                if (sourceNode.isPassword) {
-                    val nodeId = sourceNode.viewIdResourceName
-                    if (nodeId != null) {
-                        val now = System.currentTimeMillis()
-                        val lastSeen = seenPasswordFields[nodeId] ?: 0L
-                        if (now - lastSeen > COOLDOWN_MS) {
-                            seenPasswordFields[nodeId] = now
-                            val bounds = Rect()
-                            sourceNode.getBoundsInScreen(bounds)
-                            Log.i(TAG, "Password field focused: $nodeId at $bounds.")
-                            summonPasswordOverlay(bounds, nodeId)
-                        }
-                    }
-                }
-            }
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            val sourceNode = event.source ?: return
+            findEncryptedMessages(sourceNode)
+            sourceNode.recycle()
         }
-
-        sourceNode.recycle()
     }
 
     /**
@@ -135,7 +108,7 @@ class MessageDetectionService : AccessibilityService() {
                                 val bounds = Rect()
                                 nodeInfo.getBoundsInScreen(bounds)
                                 Log.i(TAG, "MATCH CONFIRMED: Identifier '$identifier' at $bounds.")
-                                summonMessageOverlay(fullMatch, barcode.value, bounds)
+                                summonOverlay(fullMatch, barcode.value, bounds)
                             }
                         }
                     }
@@ -150,43 +123,22 @@ class MessageDetectionService : AccessibilityService() {
     }
 
     /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen for a message.
+     * Summons the Poltergeist (the OverlayService) to manifest on screen.
      *
      * @param encryptedText The full encrypted payload.
      * @param correctKey The true key required for decryption.
      * @param bounds The screen coordinates where the message was found.
      */
-    private fun summonMessageOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
+    private fun summonOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
             return
         }
 
         val intent = Intent(this, OverlayService::class.java).apply {
-            putExtra(Constants.IntentKeys.OVERLAY_TYPE, OverlayTypes.TYPE_MESSAGE)
             putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
             putExtra(Constants.IntentKeys.CORRECT_KEY, correctKey)
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
-        }
-        startService(intent)
-    }
-
-    /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen for a password field.
-     *
-     * @param bounds The screen coordinates where the password field was found.
-     * @param nodeId The resource ID of the password field node.
-     */
-    private fun summonPasswordOverlay(bounds: Rect, nodeId: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "Cannot summon overlay: permission not granted.")
-            return
-        }
-
-        val intent = Intent(this, OverlayService::class.java).apply {
-            putExtra(Constants.IntentKeys.OVERLAY_TYPE, OverlayTypes.TYPE_PASSWORD)
-            putExtra(Constants.IntentKeys.BOUNDS, bounds)
-            putExtra(Constants.IntentKeys.NODE_ID, nodeId)
         }
         startService(intent)
     }
@@ -196,48 +148,8 @@ class MessageDetectionService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-        unregisterReceiver(passwordPasteReceiver)
         Log.d(TAG, "Watcher service has been destroyed.")
     }
-
-    private val passwordPasteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Constants.IntentKeys.PASTE_PASSWORD_ACTION) {
-                val nodeId = intent.getStringExtra(Constants.IntentKeys.NODE_ID)
-                val textToPaste = intent.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
-                if (nodeId != null && textToPaste != null) {
-                    pasteText(nodeId, textToPaste)
-                }
-            }
-        }
-    }
-
-    private fun pasteText(nodeId: String, text: String) {
-        val rootNode = rootInActiveWindow ?: return
-        val nodeToPaste = findNodeById(rootNode, nodeId)
-        nodeToPaste?.let {
-            val args = Bundle()
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            it.recycle()
-        }
-        rootNode.recycle()
-    }
-
-    private fun findNodeById(root: AccessibilityNodeInfo, id: String): AccessibilityNodeInfo? {
-        if (root.viewIdResourceName == id) {
-            return root
-        }
-        for (i in 0 until root.childCount) {
-            val child = root.getChild(i) ?: continue
-            val found = findNodeById(child, id)
-            if (found != null) {
-                return found
-            }
-        }
-        return null
-    }
-
 
     companion object {
         private const val TAG = "MessageDetectionService"
