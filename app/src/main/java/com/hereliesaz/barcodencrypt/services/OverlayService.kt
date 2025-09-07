@@ -30,7 +30,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
-import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository // Restored
+import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
@@ -38,12 +38,26 @@ import com.hereliesaz.barcodencrypt.util.ScannerManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * The Poltergeist.
+ *
+ * This service is responsible for displaying and managing the overlay UI that appears on top of
+ * a detected encrypted message. It is started by [MessageDetectionService].
+ *
+ * The overlay is a [ComposeView] managed by the [WindowManager]. It handles its own state
+ * (initial, success, failure), initiates the scan via [ScannerManager], and then updates its
+ * content with the result of the decryption. It is also responsible for enforcing `single-use`
+ * and `ttl` message options.
+ */
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var revokedMessageRepository: RevokedMessageRepository // Restored
+    private lateinit var revokedMessageRepository: RevokedMessageRepository
     private var composeView: ComposeView? = null
+
+    /** A custom lifecycle owner is required to host a ComposeView in a Service window. */
     private val lifecycleOwner = ServiceLifecycleOwner()
+
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var correctKey: String? = null
     private var encryptedText: String? = null
@@ -54,7 +68,7 @@ class OverlayService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
-        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao()) // Restored
+        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,8 +100,8 @@ class OverlayService : Service() {
                 if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                     lifecycleOwner.lifecycleScope.launch {
                         val messageHash = EncryptionManager.sha256(fullEncryptedText)
-                        revokedMessageRepository.revokeMessage(messageHash) // Restored
-                        Log.i(TAG, "Single-use message has been revoked.") // Restored log
+                        revokedMessageRepository.revokeMessage(messageHash)
+                        Log.i(TAG, "Single-use message has been revoked.")
                     }
                 }
             } else {
@@ -162,12 +176,27 @@ class OverlayService : Service() {
     }
 }
 
+/**
+ * Represents the different states of the overlay UI.
+ */
 sealed class OverlayState {
+    /** The initial state, before a scan has been attempted. The UI prompts the user to tap. */
     object Initial : OverlayState()
+    /** The state after a successful decryption. The UI shows the plaintext. */
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
+    /** The state after a failed decryption. The UI shows an error. */
     object Failure : OverlayState()
 }
 
+/**
+ * The main Composable function for the overlay's content.
+ * It observes the [OverlayState] and displays the appropriate UI.
+ * It also handles the auto-removal of the overlay after a delay on success or failure.
+ *
+ * @param state The current [OverlayState] to render.
+ * @param onClick The action to perform when the overlay is clicked in its `Initial` state.
+ * @param onFinish The action to perform when the overlay has finished its lifecycle and should be removed.
+ */
 @Composable
 fun OverlayContent(
     state: OverlayState,
@@ -243,3 +272,4 @@ fun OverlayContent(
         }
     }
 }
+
