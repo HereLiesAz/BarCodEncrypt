@@ -16,12 +16,12 @@ class ContactRepository(private val contactDao: ContactDao) {
     val allContacts: LiveData<List<ContactWithBarcodes>> = contactDao.getContactsWithBarcodes()
 
     /**
-     * Retrieves a single contact with their associated barcodes.
-     * @param contactId The ID of the contact to retrieve.
+     * Retrieves a single contact with their associated barcodes using their lookup key.
+     * @param contactLookupKey The lookup key of the contact to retrieve.
      * @return A LiveData object holding the contact data.
      */
-    fun getContactWithBarcodesById(contactId: Int): LiveData<ContactWithBarcodes> {
-        return contactDao.getContactWithBarcodesById(contactId)
+    fun getContactWithBarcodesByLookupKey(contactLookupKey: String): LiveData<ContactWithBarcodes> {
+        return contactDao.getContactWithBarcodesByLookupKey(contactLookupKey)
     }
 
     /**
