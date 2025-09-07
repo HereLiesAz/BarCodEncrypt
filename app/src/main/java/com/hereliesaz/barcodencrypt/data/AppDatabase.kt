@@ -6,17 +6,18 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-// Explicit imports for entities being used
+// Explicit imports for all entities
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.data.Contact
-// com.hereliesaz.barcodencrypt.data.RevokeMessage is temporarily removed
+// Import for RevokeMessage is still fine, but we'll use FQN in the annotation for diagnostics
+import com.hereliesaz.barcodencrypt.data.RevokeMessage
 
-@Database(entities = [Contact::class, Barcode::class], version = 2, exportSchema = false) // RevokeMessage::class removed
+@Database(entities = [Contact::class, Barcode::class, com.hereliesaz.barcodencrypt.data.RevokeMessage::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao
     abstract fun barcodeDao(): BarcodeDao
-    // abstract fun revokedMessageDao(): RevokedMessageDao // Temporarily removed
+    abstract fun revokedMessageDao(): RevokedMessageDao
 
     companion object {
         @Volatile
@@ -31,8 +32,8 @@ abstract class AppDatabase : RoomDatabase() {
                 // Add the 'counter' column to the 'barcodes' table.
                 db.execSQL("ALTER TABLE barcodes ADD COLUMN counter INTEGER NOT NULL DEFAULT 0")
                 
-                // Create the new 'revoked_messages' table - Temporarily removed.
-                // db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))")
+                // Create the new 'revoked_messages' table.
+                db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))")
             }
         }
 

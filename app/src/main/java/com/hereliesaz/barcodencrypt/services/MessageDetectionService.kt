@@ -11,7 +11,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.BarcodeRepository
-import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
+import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository // Restored
 import com.hereliesaz.barcodencrypt.util.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
 class MessageDetectionService : AccessibilityService() {
 
     private lateinit var barcodeRepository: BarcodeRepository
-    private lateinit var revokedMessageRepository: RevokedMessageRepository
+    private lateinit var revokedMessageRepository: RevokedMessageRepository // Restored
     private lateinit var serviceScope: CoroutineScope
 
     /**
@@ -48,7 +48,7 @@ class MessageDetectionService : AccessibilityService() {
         super.onCreate()
         val database = AppDatabase.getDatabase(application)
         barcodeRepository = BarcodeRepository(database.barcodeDao())
-        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
+        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao()) // Restored
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         Log.d(TAG, "Watcher service has been created.")
     }
@@ -81,33 +81,39 @@ class MessageDetectionService : AccessibilityService() {
 
         val text = nodeInfo.text?.toString()
         if (!text.isNullOrBlank() && text.contains("BCE::")) {
-            val regex = "BCE::v1::.*?::.*?::[A-Za-z0-9+/=\\s]+".toRegex()
-            regex.findAll(text).forEach { matchResult ->
+            // Regex for v1: "BCE::v1::.*?::.*?::[A-Za-z0-9+/=\\s]+"
+            // Regex for v2: "BCE::v2::.*?::.*?::\\d+::[A-Za-z0-9+/=\\s]+"
+            // Combined regex to find either v1 or v2 messages:
+            val combinedRegex = "BCE::(v1::.*?::.*?|v2::.*?::.*?::\\d+)::[A-Za-z0-9+/=\\s]+".toRegex()
+
+            combinedRegex.findAll(text).forEach { matchResult ->
                 val fullMatch = matchResult.value
                 val now = System.currentTimeMillis()
                 val lastSeen = seenMessages[fullMatch]
                 if (lastSeen == null || now - lastSeen > COOLDOWN_MS) {
                     seenMessages[fullMatch] = now
                     val parts = fullMatch.split("::")
-                    if (parts.size >= 5) {
+                    // For v1, parts.size >= 5. For v2, parts.size >= 6
+                    if (parts.size >= 5) { 
                         val options = parts[2]
                         val identifier = parts[3]
+                        // Counter is only relevant for v2 messages, which will have parts[4]
+                        // val counter = if (parts.getOrNull(1) == "v2" && parts.size >=6) parts[4].toLongOrNull() else null
+
                         serviceScope.launch {
-                            // For single-use messages, check if they've already been used.
                             val messageHash = EncryptionManager.sha256(fullMatch)
-                            if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
-                                revokedMessageRepository.isMessageRevoked(messageHash)
-                            ) {
+                            if (options.contains(EncryptionManager.OPTION_SINGLE_USE) && revokedMessageRepository.isMessageRevoked(messageHash)) { // Restored
                                 Log.i(TAG, "Ignoring revoked single-use message.")
-                                return@launch
+                                return@launch // Restored
                             }
 
-                            // Find the key associated with the message's identifier.
                             val barcode = barcodeRepository.getBarcodeByIdentifier(identifier)
                             if (barcode != null) {
+                                // If it's a v2 message, we might want to check the counter from the message against the barcode's current counter
+                                // This is an area for potential future enhancement (e.g., replay attack prevention for non-single-use v2 messages)
                                 val bounds = Rect()
                                 nodeInfo.getBoundsInScreen(bounds)
-                                Log.i(TAG, "MATCH CONFIRMED: Identifier '$identifier' at $bounds.")
+                                Log.i(TAG, "MATCH CONFIRMED: Identifier '$identifier' at $bounds. Message: $fullMatch")
                                 summonOverlay(fullMatch, barcode.value, bounds)
                             }
                         }
@@ -116,19 +122,11 @@ class MessageDetectionService : AccessibilityService() {
             }
         }
 
-        // Recurse through all children of the current node.
         for (i in 0 until nodeInfo.childCount) {
             findEncryptedMessages(nodeInfo.getChild(i))
         }
     }
 
-    /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen.
-     *
-     * @param encryptedText The full encrypted payload.
-     * @param correctKey The true key required for decryption.
-     * @param bounds The screen coordinates where the message was found.
-     */
     private fun summonOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")

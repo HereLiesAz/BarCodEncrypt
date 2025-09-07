@@ -31,6 +31,8 @@ import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.viewmodel.ComposeViewModel
 import kotlinx.coroutines.launch
+// Ensure EncryptionManager is imported if not using fully qualified name always
+import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 
 class ComposeActivity : ComponentActivity() {
 
@@ -201,26 +203,25 @@ fun ComposeScreen(
                     val barcode = selectedBarcode
                     if (message.isNotBlank() && barcode != null) {
                         coroutineScope.launch {
-                            val options = mutableListOf<String>()
-                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
-                            if (isTimed) options.add("${com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
-                        viewModel.incrementBarcodeCounter(barcode)
-                        val options = mutableListOf<String>()
-                        if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
-                        if (isTimed) options.add("${EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
+                            viewModel.incrementBarcodeCounter(barcode) // Increment counter state in ViewModel
 
-                        val result = EncryptionManager.encrypt(
-                            plaintext = message,
-                            ikm = barcode.value,
-                            salt = EncryptionManager.createSalt(),
-                            barcodeIdentifier = barcode.identifier,
-                            counter = barcode.counter + 1, // Use the next counter value
-                            options = options
-                        )
-                        if (result != null) {
-                            encryptedText = result
-                        } else {
-                            Toast.makeText(context, "Encryption failed.", Toast.LENGTH_SHORT).show()
+                            val options = mutableListOf<String>()
+                            if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
+                            if (isTimed) options.add("${EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
+
+                            val result = EncryptionManager.encrypt(
+                                plaintext = message,
+                                ikm = barcode.value,
+                                salt = EncryptionManager.createSalt(),
+                                barcodeIdentifier = barcode.identifier,
+                                counter = barcode.counter + 1, // Use the next counter value for this encryption
+                                options = options
+                            )
+                            if (result != null) {
+                                encryptedText = result
+                            } else {
+                                Toast.makeText(context, "Encryption failed.", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 },

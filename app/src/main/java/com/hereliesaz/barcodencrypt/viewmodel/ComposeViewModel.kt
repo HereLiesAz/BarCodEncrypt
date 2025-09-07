@@ -27,7 +27,6 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
     fun selectContact(contactLookupKey: String) {
         if (contactLookupKey == currentContactLookupKey) return
 
-        // Remove the observer from the old LiveData object
         barcodesLiveData?.removeObserver(barcodeObserver)
 
         currentContactLookupKey = contactLookupKey
@@ -41,29 +40,40 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        // Clean up the observer when the ViewModel is destroyed
         barcodesLiveData?.removeObserver(barcodeObserver)
+    }
+
+    /**
+     * Call this when a barcode is selected/used to encrypt a message.
+     * It increments the counter in the database via the repository.
+     */
+    suspend fun incrementBarcodeCounter(barcode: Barcode) {
+        repository.incrementCounter(barcode.id)
     }
 
     suspend fun encryptMessage(
         plaintext: String,
-        barcode: Barcode,
+        barcode: Barcode, // This is the selected barcode from the UI
         options: List<String>
     ): String? {
-        // Get the freshest barcode state from DB to ensure counter is correct
-        val freshBarcode = repository.getBarcode(barcode.id) ?: return null
+        // It's important that the counter increment happens consistently.
+        // The ComposeActivity currently calls viewModel.incrementBarcodeCounter(barcode) which uses barcode.id
+        // and then the encrypt method here uses barcode.counter + 1.
+        // The actual counter used for encryption will be based on the state of 'barcode' passed in,
+        // plus one. The incrementBarcodeCounter call handles persisting this increment.
 
-        // Increment the counter and update the database
-        val updatedBarcode = freshBarcode.copy(counter = freshBarcode.counter + 1)
-        repository.updateBarcode(updatedBarcode)
+        // No need to fetch freshBarcode here if ComposeActivity calls incrementBarcodeCounter separately
+        // and the UI reflects the change for barcode.counter if necessary.
+        // The main thing is that EncryptionManager.encrypt gets the *next* counter value.
 
-        // Encrypt with the new counter value
         return EncryptionManager.encrypt(
             plaintext = plaintext,
-            ikm = updatedBarcode.value,
+            ikm = barcode.value,
             salt = EncryptionManager.createSalt(),
-            barcodeIdentifier = updatedBarcode.identifier,
-            counter = updatedBarcode.counter,
+            barcodeIdentifier = barcode.identifier,
+            // The crucial part: use barcode.counter + 1 for this specific encryption operation.
+            // The separate call to incrementBarcodeCounter in ComposeActivity handles updating the DB for future use.
+            counter = barcode.counter + 1, 
             options = options
         )
     }
