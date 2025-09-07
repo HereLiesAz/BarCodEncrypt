@@ -21,17 +21,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.services.MessageDetectionService
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.ContactDetailActivity
+import com.hereliesaz.barcodencrypt.ui.ScannerActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
+import com.hereliesaz.barcodencrypt.util.ScannerManager
 import com.hereliesaz.barcodencrypt.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    private val scanLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val scannedValue = if (result.resultCode == RESULT_OK) {
+                result.data?.getStringExtra(ScannerActivity.EXTRA_SCAN_RESULT)
+            } else {
+                null
+            }
+            ScannerManager.onScanResult(scannedValue)
+        }
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -59,6 +73,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            ScannerManager.requests.collect {
+                scanLauncher.launch(Intent(this@MainActivity, ScannerActivity::class.java))
+            }
+        }
+
         setContent {
             BarcodencryptTheme {
                 MainScreen(
