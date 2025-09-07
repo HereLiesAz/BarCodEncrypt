@@ -1,5 +1,8 @@
 package com.hereliesaz.barcodencrypt.data
 
+// Assuming RevokedMessageDao and RevokeMessage are resolved from the same package.
+// If type resolution issues arise with this file, we might need explicit imports or FQNs here too.
+
 /**
  * A repository for managing the blacklist. It's not complicated.
  * @param revokedMessageDao The DAO for the blacklist table.
@@ -11,7 +14,7 @@ class RevokedMessageRepository(private val revokedMessageDao: RevokedMessageDao)
      * @param messageHash The SHA-256 hash of the message to blacklist.
      */
     suspend fun revokeMessage(messageHash: String) {
-        revokedMessageDao.insertRevokedMessage(RevokedMessage(messageHash))
+        revokedMessageDao.insertRevokedMessage(RevokeMessage(messageHash))
     }
 
     /**

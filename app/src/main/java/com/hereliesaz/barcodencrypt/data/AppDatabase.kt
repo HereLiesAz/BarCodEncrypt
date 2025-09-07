@@ -6,18 +6,17 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-// Explicit imports for all entities
-import com.hereliesaz.barcodencrypt.data.Barcode
-import com.hereliesaz.barcodencrypt.data.Contact
-// Import for RevokeMessage is still fine, but we'll use FQN in the annotation for diagnostics
-import com.hereliesaz.barcodencrypt.data.RevokeMessage
 
-@Database(entities = [Contact::class, Barcode::class, com.hereliesaz.barcodencrypt.data.RevokeMessage::class], version = 2, exportSchema = false)
+@Database(entities = [
+    com.hereliesaz.barcodencrypt.data.Contact::class, 
+    com.hereliesaz.barcodencrypt.data.Barcode::class, 
+    com.hereliesaz.barcodencrypt.data.RevokeMessage::class // Reintroduced with FQN
+], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract fun contactDao(): ContactDao
-    abstract fun barcodeDao(): BarcodeDao
-    abstract fun revokedMessageDao(): RevokedMessageDao
+    abstract fun contactDao(): com.hereliesaz.barcodencrypt.data.ContactDao
+    abstract fun barcodeDao(): com.hereliesaz.barcodencrypt.data.BarcodeDao
+    abstract fun revokedMessageDao(): com.hereliesaz.barcodencrypt.data.RevokedMessageDao // Reintroduced with FQN
 
     companion object {
         @Volatile
@@ -25,15 +24,10 @@ abstract class AppDatabase : RoomDatabase() {
 
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Create contacts table 
                 db.execSQL("CREATE TABLE IF NOT EXISTS `contacts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `lookupKey` TEXT NOT NULL, `name` TEXT NOT NULL)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_contacts_lookupKey` ON `contacts` (`lookupKey`)")
-
-                // Add the 'counter' column to the 'barcodes' table.
                 db.execSQL("ALTER TABLE barcodes ADD COLUMN counter INTEGER NOT NULL DEFAULT 0")
-                
-                // Create the new 'revoked_messages' table.
-                db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `revoked_messages` (`messageHash` TEXT NOT NULL, PRIMARY KEY(`messageHash`))") // DDL uncommented
             }
         }
 
