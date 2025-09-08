@@ -27,15 +27,15 @@ abstract class AppDatabase : RoomDatabase() {
         private var INSTANCE: AppDatabase? = null
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE barcodes ADD COLUMN keyType TEXT NOT NULL DEFAULT 'SINGLE_BARCODE'")
-                database.execSQL("ALTER TABLE barcodes ADD COLUMN passwordHash TEXT")
+            override fun migrate(db: SupportSQLiteDatabase) { // Changed parameter name
+                db.execSQL("ALTER TABLE barcodes ADD COLUMN keyType TEXT NOT NULL DEFAULT 'SINGLE_BARCODE'")
+                db.execSQL("ALTER TABLE barcodes ADD COLUMN passwordHash TEXT")
             }
         }
 
         private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE barcodes ADD COLUMN barcodeSequence TEXT")
+            override fun migrate(db: SupportSQLiteDatabase) { // Changed parameter name
+                db.execSQL("ALTER TABLE barcodes ADD COLUMN barcodeSequence TEXT")
             }
         }
 

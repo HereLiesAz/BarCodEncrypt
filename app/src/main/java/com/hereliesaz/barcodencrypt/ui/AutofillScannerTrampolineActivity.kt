@@ -7,12 +7,11 @@ import android.os.Bundle
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
+import android.widget.RemoteViews // Added import for RemoteViews
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import android.service.autofill.Dataset
-// RemoteViews might be needed if we were to provide a presentation for the setValue, but here it's null.
-// import android.widget.RemoteViews
 // import android.service.autofill.InlinePresentation // Commenting out as it might be unused
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
 import com.hereliesaz.barcodencrypt.util.Constants
@@ -39,9 +38,9 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
 
                 if (autofillId != null) {
                     val resultIntent = Intent()
-                    // MODIFIED to use 2-argument setValue
+                    // MODIFIED to use 3-argument setValue with null RemoteViews
                     val dataset = Dataset.Builder()
-                        .setValue(autofillId, AutofillValue.forText(scannedValue))
+                        .setValue(autofillId, AutofillValue.forText(scannedValue), null as RemoteViews?)
                         .build()
                     resultIntent.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
                     setResult(Activity.RESULT_OK, resultIntent)
