@@ -60,41 +60,42 @@ class MessageDetectionService : AccessibilityService() {
         if (nodeInfo == null) return
 
         val text = nodeInfo.text?.toString()
-        if (!text.isNullOrBlank() && text.contains("BCE::")) {
-            val regex = "BCE::v[12]::.*?::.*?::(?:\\d+::)?[A-Za-z0-9+/=\\s]+".toRegex()
-            regex.findAll(text).forEach { matchResult ->
-                val fullMatch = matchResult.value
-                val now = System.currentTimeMillis()
+        if (text.isNullOrBlank()) return
 
-                if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
-                    seenMessages[fullMatch] = now
-                    val parts = fullMatch.split("::")
-                    if (parts.size >= 5) {
-                        val options = parts[2]
-                        serviceScope.launch {
-                            val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it) } ?: return@launch
-                            val contactWithBarcodes = contactRepository.getContactWithBarcodesByLookupKeySync(contactLookupKey) ?: return@launch
+        val v3Regex = "~BCE~[A-Za-z0-9+/=]+".toRegex()
+        val v1v2Regex = "BCE::v[12]::.*?::.*?::(?:\\d+::)?[A-Za-z0-9+/=\\s]+".toRegex()
 
-                            val messageHash = EncryptionManager.sha256(fullMatch)
-                            if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
-                                revokedMessageRepository.isMessageRevoked(messageHash)
-                            ) {
-                                Log.i(TAG, "Ignoring revoked single-use message.")
-                                return@launch
+        val allMatches = v3Regex.findAll(text) + v1v2Regex.findAll(text)
+
+        allMatches.forEach { matchResult ->
+            val fullMatch = matchResult.value
+            val now = System.currentTimeMillis()
+
+            if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
+                seenMessages[fullMatch] = now
+                serviceScope.launch {
+                    val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it) } ?: return@launch
+                    val contactWithBarcodes = contactRepository.getContactWithBarcodesByLookupKeySync(contactLookupKey) ?: return@launch
+
+                    val options = if (fullMatch.startsWith("BCE::")) fullMatch.split("::").getOrNull(2) ?: "" else ""
+                    val messageHash = EncryptionManager.sha256(fullMatch)
+                    if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
+                        revokedMessageRepository.isMessageRevoked(messageHash)
+                    ) {
+                        Log.i(TAG, "Ignoring revoked single-use message.")
+                        return@launch
+                    }
+
+                    for (barcode in contactWithBarcodes.barcodes) {
+                        barcode.decryptValue()
+                        val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
+                        if (decryptedText != null) {
+                            val bounds = Rect()
+                            nodeInfo.getBoundsInScreen(bounds)
+                            withContext(Dispatchers.Main) {
+                                summonDecryptionOverlay(decryptedText, bounds)
                             }
-
-                            for (barcode in contactWithBarcodes.barcodes) {
-                                barcode.decryptValue()
-                                val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
-                                if (decryptedText != null) {
-                                    val bounds = Rect()
-                                    nodeInfo.getBoundsInScreen(bounds)
-                                    withContext(Dispatchers.Main) {
-                                        summonDecryptionOverlay(decryptedText, bounds)
-                                    }
-                                    return@launch
-                                }
-                            }
+                            return@launch
                         }
                     }
                 }
