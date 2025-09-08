@@ -28,15 +28,38 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
      *
      * @param contactLookupKey The lookup key of the contact.
      * @param rawValue The raw string value from the scanned barcode.
+     * @param password An optional password to protect the key.
      */
-    suspend fun createAndInsertBarcode(contactLookupKey: String, rawValue: String) {
+    suspend fun createAndInsertBarcode(contactLookupKey: String, rawValue: String, password: String? = null) {
         val name = "Key ending in...${EncryptionManager.sha256(rawValue).takeLast(6)}"
         val (iv, encryptedValue) = KeyManager.encrypt(rawValue)
+        val keyType = if (password.isNullOrEmpty()) KeyType.SINGLE_BARCODE else KeyType.PASSWORD_PROTECTED_BARCODE
+        val passwordHash = if (password.isNullOrEmpty()) null else EncryptionManager.sha256(password)
         val barcode = Barcode(
             contactLookupKey = contactLookupKey,
             name = name,
             encryptedValue = encryptedValue,
-            iv = iv
+            iv = iv,
+            keyType = keyType,
+            passwordHash = passwordHash
+        )
+        barcodeDao.insertBarcode(barcode)
+    }
+
+    suspend fun createAndInsertBarcodeSequence(contactLookupKey: String, sequence: List<String>, password: String? = null) {
+        val rawValue = sequence.joinToString("")
+        val name = "Key ending in...${EncryptionManager.sha256(rawValue).takeLast(6)}"
+        val (iv, encryptedValue) = KeyManager.encrypt(rawValue)
+        val keyType = if (password.isNullOrEmpty()) KeyType.BARCODE_SEQUENCE else KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE
+        val passwordHash = if (password.isNullOrEmpty()) null else EncryptionManager.sha256(password)
+        val barcode = Barcode(
+            contactLookupKey = contactLookupKey,
+            name = name,
+            encryptedValue = encryptedValue,
+            iv = iv,
+            keyType = keyType,
+            passwordHash = passwordHash,
+            barcodeSequence = sequence
         )
         barcodeDao.insertBarcode(barcode)
     }

@@ -154,6 +154,39 @@ fun ComposeScreen(
     val recipientLabelText = stringResource(id = R.string.recipient)
     val keyLabelText = stringResource(id = R.string.key)
     val selectRecipientAndKeyButtonText = stringResource(id = R.string.select_recipient_and_key)
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
+    if (showPasswordDialog) {
+        PasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = { password ->
+                showPasswordDialog = false
+                val barcode = selectedBarcode
+                if (message.isNotBlank() && barcode != null) {
+                    coroutineScope.launch {
+                        val options = mutableListOf<String>()
+                        if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                        if (isTimed) {
+                            options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
+                            if(ttlStartsOnOpen) options.add("ttl_on_open=true")
+                        }
+
+                        val result = viewModel.encryptMessage(
+                            plaintext = message,
+                            barcode = barcode,
+                            options = options,
+                            password = password
+                        )
+                        if (result != null) {
+                            encryptedText = result
+                        } else {
+                            Toast.makeText(context, context.getString(R.string.encryption_failed), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
@@ -240,23 +273,28 @@ fun ComposeScreen(
             onClick = {
                 val barcode = selectedBarcode
                 if (message.isNotBlank() && barcode != null) {
-                    coroutineScope.launch {
-                        val options = mutableListOf<String>()
-                        if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
-                        if (isTimed) {
-                            options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
-                            if(ttlStartsOnOpen) options.add("ttl_on_open=true")
-                        }
+                    if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE) {
+                        showPasswordDialog = true
+                    } else {
+                        coroutineScope.launch {
+                            val options = mutableListOf<String>()
+                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                            if (isTimed) {
+                                options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
+                                if (ttlStartsOnOpen) options.add("ttl_on_open=true")
+                            }
 
-                        val result = viewModel.encryptMessage(
-                            plaintext = message,
-                            barcode = barcode,
-                            options = options
-                        )
-                        if (result != null) {
-                            encryptedText = result
-                        } else {
-                            Toast.makeText(context, context.getString(R.string.encryption_failed), Toast.LENGTH_SHORT).show()
+                            val result = viewModel.encryptMessage(
+                                plaintext = message,
+                                barcode = barcode,
+                                options = options
+                            )
+                            if (result != null) {
+                                encryptedText = result
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.encryption_failed), Toast.LENGTH_SHORT)
+                                    .show()
+                            }
                         }
                     }
                 }

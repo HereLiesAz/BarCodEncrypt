@@ -7,6 +7,13 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.hereliesaz.barcodencrypt.crypto.KeyManager
 
+enum class KeyType {
+    SINGLE_BARCODE,
+    PASSWORD_PROTECTED_BARCODE,
+    BARCODE_SEQUENCE,
+    PASSWORD_PROTECTED_BARCODE_SEQUENCE
+}
+
 /**
  * A record of a single cryptographic sigil. A barcode.
  * It is forever bound to a contact, not by a fragile integer ID, but by their persistent,
@@ -18,6 +25,9 @@ import com.hereliesaz.barcodencrypt.crypto.KeyManager
  * @param encryptedValue The encrypted IKM, protected by the Android Keystore.
  * @param iv The initialization vector used for encrypting the [encryptedValue].
  * @param counter The message counter for the rolling key. Incremented for each encrypted message.
+ * @param keyType The type of key, used to determine how to derive the IKM.
+ * @param passwordHash The hash of the password, if the key is password-protected.
+ * @param barcodeSequence The list of barcode values for a sequence key.
  */
 @Entity(
     tableName = "barcodes",
@@ -32,7 +42,10 @@ data class Barcode(
     val encryptedValue: ByteArray,
     @ColumnInfo(typeAffinity = ColumnInfo.BLOB)
     val iv: ByteArray,
-    val counter: Long = 0L
+    val counter: Long = 0L,
+    val keyType: KeyType = KeyType.SINGLE_BARCODE,
+    val passwordHash: String? = null,
+    val barcodeSequence: List<String>? = null
 ) {
     /**
      * The decrypted, raw, sacred text of the barcode itself. This is the Initial Keying Material (IKM).

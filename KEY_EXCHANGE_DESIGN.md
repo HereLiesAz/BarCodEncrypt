@@ -12,7 +12,7 @@ This document outlines a protocol for temporary key exchange, building upon the 
 
 This design uses a **Double Ratchet**, combining a **Diffie-Hellman (DH) ratchet** for key agreement with a **symmetric-key ratchet** for per-message keys.
 
--   **Barcode as Pre-Shared Key:** The v2 `IKM` (the barcode value) acts as the initial shared secret `SK` to bootstrap the protocol.
+-   **Barcode as Pre-Shared Key:** The v2 `IKM` acts as the initial shared secret `SK` to bootstrap the protocol. The IKM can be derived from a single barcode, a password-protected barcode, a sequence of barcodes, or a password-protected sequence of barcodes. See `CRYPTO_DESIGN.md` for more details.
 -   **DH Ratchet:** This is the "slow" ratchet, which moves forward when a party receives a message with a new DH public key. It uses the output of a DH calculation to re-seed the symmetric ratchet. This provides healing and post-compromise security.
 -   **Symmetric-Key Ratchet:** This is the "fast" ratchet, which moves forward with every message. It uses the HKDF-based counter system from v2.
 

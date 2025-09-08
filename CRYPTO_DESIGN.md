@@ -12,7 +12,11 @@ This document outlines the design for a new cryptographic model for Barcodencryp
 
 The new model is based on the **HMAC-based Key Derivation Function (HKDF)**, as specified in [RFC 5869](https://tools.ietf.org/html/rfc5869).
 
--   **Initial Keying Material (IKM):** The raw secret value of the physical barcode. This is the root secret.
+-   **Initial Keying Material (IKM):** The IKM is the root secret used for key derivation. Its composition depends on the key type:
+    -   **Single Barcode:** The raw secret value of the physical barcode.
+    -   **Password-Protected Barcode:** The SHA-256 hash of the barcode's raw value concatenated with the user's password. `SHA256(barcode_value + password)`
+    -   **Barcode Sequence:** The concatenation of the raw values of all barcodes in the sequence. `barcode1_value + barcode2_value + ...`
+    -   **Password-Protected Barcode Sequence:** The SHA-256 hash of the concatenated barcode values and the user's password. `SHA256(barcode1_value + barcode2_value + ... + password)`
 -   **Salt:** A cryptographically random value **generated for each message**. The salt is not stored, but is prepended to the ciphertext. This ensures that even if the same message is encrypted twice with the same key and counter, the resulting ciphertext will be different.
 -   **Pseudorandom Key (PRK):** A fixed-length, cryptographically strong key derived from the IKM and the per-message Salt using the **HKDF-Extract** step.
 -   **Message Counter:** A simple integer, stored per-barcode, that is incremented for every encrypted message. This counter is the primary input that changes for each new key, enabling the "rolling" nature of the keys.
