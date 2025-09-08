@@ -9,17 +9,15 @@ import android.provider.Settings
 import android.view.autofill.AutofillManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner // Changed
@@ -33,9 +31,16 @@ import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.viewmodel.SettingsViewModel
+import com.hereliesaz.barcodencrypt.viewmodel.SettingsViewModelFactory
 
 @RequiresApi(Build.VERSION_CODES.O)
 class SettingsActivity : ComponentActivity() {
+
+    private val viewModel: SettingsViewModel by viewModels {
+        SettingsViewModelFactory(applicationContext)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -52,11 +57,11 @@ class SettingsActivity : ComponentActivity() {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
-                    onNavigateToSettings = { 
-                        // Already in settings, do nothing or refresh if needed 
+                    onNavigateToSettings = {
+                        // Already in settings, do nothing or refresh if needed
                     },
                     screenContent = {
-                        SettingsScreen()
+                        SettingsScreen(viewModel)
                     }
                 )
             }
@@ -66,10 +71,21 @@ class SettingsActivity : ComponentActivity() {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(viewModel: SettingsViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val autofillManager = remember { context.getSystemService(AutofillManager::class.java) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
+    if (showPasswordDialog) {
+        PasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = { password ->
+                viewModel.setPassword(password)
+                showPasswordDialog = false
+            }
+        )
+    }
 
     fun isServiceEnabled(): Boolean {
         if (autofillManager == null || !autofillManager.hasEnabledAutofillServices()) {
@@ -97,7 +113,9 @@ fun SettingsScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
         Button(
             onClick = {
                 val intent = Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)
@@ -106,7 +124,19 @@ fun SettingsScreen() {
             },
             enabled = !isEnabled
         ) {
-            Text(if (isEnabled) stringResource(R.string.autofill_service_enabled_text) else stringResource(R.string.enable_autofill_service_button_text))
+            Text(if (isEnabled) stringResource(R.string.autofill_service_enabled_text) else stringResource(
+                R.string.enable_autofill_service_button_text))
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = { showPasswordDialog = true }) {
+            Text("Change Password")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = { viewModel.logout() }) {
+            Text("Log out")
         }
     }
 }
