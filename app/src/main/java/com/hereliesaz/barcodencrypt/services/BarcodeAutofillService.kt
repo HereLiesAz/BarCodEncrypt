@@ -57,12 +57,14 @@ class BarcodeAutofillService : AutofillService() {
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
+        // Dataset is for authentication, no separate presentation needed for the dataset itself here.
         val dataset = Dataset.Builder()
-            .setPresentation(remoteViews) // Changed to use setPresentation
             .setAuthentication(intentSender)
             .build()
 
+        // The remoteViews for the suggestion is set on the FillResponse
         val fillResponse = FillResponse.Builder()
+            .setPresentation(remoteViews) // Correctly set presentation on FillResponse.Builder
             .addDataset(dataset)
             .build()
 

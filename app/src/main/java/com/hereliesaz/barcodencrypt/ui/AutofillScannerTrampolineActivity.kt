@@ -7,16 +7,16 @@ import android.os.Bundle
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
-import android.widget.RemoteViews // Added import for RemoteViews
+// import android.widget.RemoteViews // No longer needed here
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import android.service.autofill.Dataset
-// import android.service.autofill.InlinePresentation // Commenting out as it might be unused
+import android.service.autofill.InlinePresentation // Required for API 28+
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
 import com.hereliesaz.barcodencrypt.util.Constants
 
-@RequiresApi(Build.VERSION_CODES.O)
+@RequiresApi(Build.VERSION_CODES.O) // minSdk for this activity is 26
 class AutofillScannerTrampolineActivity : ComponentActivity() {
 
     private val scanResultLauncher =
@@ -28,7 +28,6 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
             }
 
             if (scannedValue != null) {
-                // MODIFIED: getParcelableExtra
                 val autofillId: AutofillId? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(BarcodeAutofillService.EXTRA_AUTOFILL_ID, AutofillId::class.java)
                 } else {
@@ -38,10 +37,18 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
 
                 if (autofillId != null) {
                     val resultIntent = Intent()
-                    // MODIFIED to use 3-argument setValue with null RemoteViews
-                    val dataset = Dataset.Builder()
-                        .setValue(autofillId, AutofillValue.forText(scannedValue), null as RemoteViews?)
-                        .build()
+                    val datasetBuilder = Dataset.Builder()
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) { // API 28+
+                        // Use setValue with nullable InlinePresentation
+                        datasetBuilder.setValue(autofillId, AutofillValue.forText(scannedValue), null as InlinePresentation?)
+                    } else { // API 26, 27
+                        // Use deprecated setValue and suppress warning
+                        @Suppress("DEPRECATION")
+                        datasetBuilder.setValue(autofillId, AutofillValue.forText(scannedValue))
+                    }
+                    
+                    val dataset = datasetBuilder.build()
                     resultIntent.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
                     setResult(Activity.RESULT_OK, resultIntent)
                 }
