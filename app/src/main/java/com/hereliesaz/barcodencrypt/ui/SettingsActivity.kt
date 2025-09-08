@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.autofill.AutofillManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -61,6 +62,8 @@ class SettingsActivity : ComponentActivity() {
     companion object {
         private const val GLOBAL_APP_ASSOCIATIONS_PREFS = "global_app_associations_prefs"
         private const val KEY_ASSOCIATED_APPS = "key_associated_apps"
+        private const val TAG_SETTINGS_ACTIVITY = "SettingsActivity"
+        const val GOOGLE_VOICE_PACKAGE_NAME = "com.google.android.apps.googlevoice"
 
         fun loadAssociatedApps(context: Context): Set<String> {
             val prefs = context.getSharedPreferences(GLOBAL_APP_ASSOCIATIONS_PREFS, Context.MODE_PRIVATE)
@@ -74,29 +77,38 @@ class SettingsActivity : ComponentActivity() {
 
         fun getInstalledAppsWithNames(context: Context): List<AppInfo> {
             val pm = context.packageManager
-            // Using 0 as a flag is fine if not specifically needing GET_META_DATA for this list generation
-            val packages = pm.getInstalledApplications(0)
-            return packages.mapNotNull { appInfo ->
+            val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            Log.d(TAG_SETTINGS_ACTIVITY, "Total packages from PackageManager: ${packages.size}")
+
+            var googleVoiceFoundInRawList = false
+            for (appInfo in packages) {
+                if (appInfo.packageName == GOOGLE_VOICE_PACKAGE_NAME) {
+                    googleVoiceFoundInRawList = true
+                    Log.i(TAG_SETTINGS_ACTIVITY, "Google Voice FOUND in raw PackageManager list! Flags: ${appInfo.flags}, Enabled: ${appInfo.enabled}")
+                    break
+                }
+            }
+            if (!googleVoiceFoundInRawList) {
+                Log.w(TAG_SETTINGS_ACTIVITY, "Google Voice (pkg: $GOOGLE_VOICE_PACKAGE_NAME) NOT FOUND in raw PackageManager list.")
+            }
+
+            val appInfos = packages.mapNotNull { appInfo ->
                 try {
                     val appName = pm.getApplicationLabel(appInfo).toString()
-                    // Filter to include apps that have a launch intent (most user-interactive apps)
-                    // This is generally more inclusive than filtering by system/updated_system flags alone.
-                    if (pm.getLaunchIntentForPackage(appInfo.packageName) != null) {
-                        AppInfo(appInfo.packageName, appName)
-                    } else {
-                        // Optionally, include apps without launch intents if they are not system apps
-                        // This might include certain services or apps that are not directly launchable
-                        // but might still be relevant for message detection in some edge cases.
-                        if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) {
-                             AppInfo(appInfo.packageName, appName) // Include non-system apps even without launch intent
-                        } else {
-                            null // Filter out system apps without launch intents
-                        }
-                    }
+                    AppInfo(appInfo.packageName, appName)
                 } catch (e: Exception) {
-                    null // Skip if app name can't be retrieved or other error
+                    null 
                 }
             }.sortedBy { it.appName.lowercase() }
+            
+            Log.d(TAG_SETTINGS_ACTIVITY, "Total appInfos mapped to AppInfo objects: ${appInfos.size}")
+            val voiceAppInMappedList = appInfos.find { it.packageName == GOOGLE_VOICE_PACKAGE_NAME }
+            if (voiceAppInMappedList != null) {
+                 Log.i(TAG_SETTINGS_ACTIVITY, "Google Voice FOUND in final mapped AppInfo list: ${voiceAppInMappedList.appName}")
+            } else {
+                 Log.w(TAG_SETTINGS_ACTIVITY, "Google Voice NOT FOUND in final mapped AppInfo list.")
+            }
+            return appInfos
         }
     }
 
