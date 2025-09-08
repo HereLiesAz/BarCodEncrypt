@@ -10,7 +10,7 @@ While holes in a safe make for a way in, holes can be filled. Walls can be made 
 
 1.  **Physical Keys:** Digital keys are ephemeral, easily guessed. A physical barcode, while not Fort Knox, introduces a tangible barrier to entry.
 2.  **Ephemeral Messages:** The sender dictates the lifespan of a message. It can be a fleeting whisper, visible only once (`single-use`), or a more persistent statement with a time-to-live (`ttl`).
-3.  **Passive Detection:** The app, once granted the necessary permissions, watches passively. It doesn't live inside a specific messaging app; it lives on top of the screen, looking for its own encrypted spoor.
+3.  **Passive Detection:** The app, once granted the necessary permissions, watches passively. It doesn't live inside a specific messaging app; it lives on top of the screen, looking for its own encrypted spoor and for password fields that it can help with.
 
 ## How It Works
 
@@ -25,6 +25,12 @@ While holes in a safe make for a way in, holes can be filled. Walls can be made 
 2.  **Detect:** When an encrypted message appears on screen (e.g., in a text message or email), the Watcher service will detect it and place a semi-transparent yellow overlay on it.
 3.  **Scan:** Tap the overlay. The barcode scanner will open.
 4.  **Reveal:** Scan the correct barcode that was used to encrypt the message. The overlay will turn green and reveal the plaintext. If the key is incorrect, it will turn red. The message will disappear according to the options it was encrypted with.
+
+### Password Assistant
+The Watcher Service has a second sense. It can detect when you tap on a password field in any app.
+1.  **Detect:** When a password field is focused, a small barcode icon will appear next to it.
+2.  **Scan:** Tap the icon to open the barcode scanner.
+3.  **Paste:** Scan any barcode. The raw content of the barcode will be automatically and instantly pasted into the password field. This allows you to use physical barcodes as passwords, without needing to replace your primary password manager.
 
 ## Current Status
 

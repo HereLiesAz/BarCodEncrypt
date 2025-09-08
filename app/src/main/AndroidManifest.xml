@@ -46,22 +46,16 @@
             android:label="@string/compose_message"
             android:theme="@style/Theme.Barcodencrypt" />
 
-        <!-- Another ghost for another machine. -->
-        <activity
-            android:name=".ui.AutofillScannerTrampolineActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
         <!-- The Archives. -->
         <activity
             android:name=".ui.ContactDetailActivity"
             android:label="@string/contact_details"
             android:theme="@style/Theme.Barcodencrypt" />
 
-        <!-- The place for tweaking the machine. -->
+        <!-- A new ghost for the password machine. -->
         <activity
-            android:name=".ui.SettingsActivity"
-            android:label="@string/settings"
-            android:theme="@style/Theme.Barcodencrypt" />
+            android:name=".ui.PasswordScannerTrampolineActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
 
         <!-- The Watcher, forever vigilant. -->
@@ -81,17 +75,6 @@
         <service
             android:name=".services.OverlayService"
             android:exported="false"/>
-
-        <!-- The new ghost in the machine, the password filler. -->
-        <service
-            android:name=".services.BarcodeAutofillService"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_AUTOFILL_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.autofill.AutofillService" />
-            </intent-filter>
-        </service>
 
     </application>
 
