@@ -21,6 +21,16 @@ import javax.crypto.spec.SecretKeySpec
  */
 object EncryptionManager {
 
+    data class DecryptedMessage(
+        val plaintext: String,
+        val keyName: String,
+        val counter: Long,
+        val maxAttempts: Int,
+        val singleUse: Boolean,
+        val ttlHours: Int?,
+        val ttlOnOpen: Boolean
+    )
+
     private const val ALGORITHM = "AES"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val KEY_DERIVATION_ALGORITHM = "SHA-256"
@@ -143,9 +153,10 @@ object EncryptionManager {
         ikm: String,
         keyName: String,
         counter: Long,
-        options: List<String> = emptyList()
+        options: List<String> = emptyList(),
+        maxAttempts: Int = 0
     ): String? {
-        return encryptV3(plaintext, ikm, keyName, counter, options)
+        return encryptV3(plaintext, ikm, keyName, counter, options, maxAttempts)
     }
 
     private fun encryptV3(
@@ -153,7 +164,8 @@ object EncryptionManager {
         ikm: String,
         keyName: String,
         counter: Long,
-        options: List<String>
+        options: List<String>,
+        maxAttempts: Int
     ): String? {
         return try {
             val salt = createSalt()
@@ -175,14 +187,21 @@ object EncryptionManager {
             if (options.contains(OPTION_SINGLE_USE)) flags = (flags.toInt() or 0x01).toByte()
             if (options.any { it.startsWith("ttl_hours") }) flags = (flags.toInt() or 0x02).toByte()
             if (options.contains("ttl_on_open=true")) flags = (flags.toInt() or 0x04).toByte()
+            if (maxAttempts > 0) flags = (flags.toInt() or 0x08).toByte()
+
 
             val keyNameBytes = keyName.toByteArray(StandardCharsets.UTF_8)
             val counterBytes = counter.toString().toByteArray(StandardCharsets.UTF_8)
 
-            val header = byteArrayOf(version, flags) +
+            var header = byteArrayOf(version, flags) +
                     keyNameBytes.size.toByte() + keyNameBytes +
-                    counterBytes.size.toByte() + counterBytes +
-                    salt + iv
+                    counterBytes.size.toByte() + counterBytes
+
+            if (maxAttempts > 0) {
+                header += maxAttempts.toByte()
+            }
+
+            header += salt + iv
 
             val payload = header + encryptedBytes
             val base64Payload = Base64.encodeToString(payload, Base64.NO_WRAP)
@@ -194,7 +213,57 @@ object EncryptionManager {
         }
     }
 
-    fun decrypt(ciphertext: String, ikm: String): String? {
+    fun parseHeader(ciphertext: String): DecryptedMessage? {
+        // This is a simplified version of decrypt that only parses the header
+        // It doesn't perform any actual decryption.
+        // It uses a dummy IKM because it's required by the decrypt function signature.
+        return when {
+            ciphertext.startsWith(HEADER_PREFIX_V3) -> {
+                try {
+                    val base64Payload = ciphertext.removePrefix(HEADER_PREFIX_V3)
+                    val payload = Base64.decode(base64Payload, Base64.NO_WRAP)
+
+                    var offset = 0
+                    val version = payload[offset++]
+                    if (version != 3.toByte()) return null
+
+                    val flags = payload[offset++]
+                    val singleUse = (flags.toInt() and 0x01) != 0
+                    val ttlOnOpen = (flags.toInt() and 0x04) != 0
+                    val hasMaxAttempts = (flags.toInt() and 0x08) != 0
+
+                    val keyNameSize = payload[offset++]
+                    val keyName = String(payload, offset, keyNameSize.toInt(), StandardCharsets.UTF_8)
+                    offset += keyNameSize
+
+                    val counterSize = payload[offset++]
+                    val counter = String(payload, offset, counterSize.toInt(), StandardCharsets.UTF_8).toLong()
+                    offset += counterSize
+
+                    val maxAttempts = if (hasMaxAttempts) {
+                        payload[offset++].toInt() and 0xFF
+                    } else {
+                        0
+                    }
+
+                    DecryptedMessage(
+                        plaintext = "",
+                        keyName = keyName,
+                        counter = counter,
+                        maxAttempts = maxAttempts,
+                        singleUse = singleUse,
+                        ttlHours = null, // TODO: Implement TTL
+                        ttlOnOpen = ttlOnOpen
+                    )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            else -> null // Other formats not supported for header parsing alone
+        }
+    }
+
+    fun decrypt(ciphertext: String, ikm: String): DecryptedMessage? {
         return when {
             ciphertext.startsWith(HEADER_PREFIX_V3) -> decryptV3(ciphertext, ikm)
             ciphertext.startsWith("BCE::") -> {
@@ -209,7 +278,7 @@ object EncryptionManager {
         }
     }
 
-    private fun decryptV3(ciphertext: String, ikm: String): String? {
+    private fun decryptV3(ciphertext: String, ikm: String): DecryptedMessage? {
         try {
             val base64Payload = ciphertext.removePrefix(HEADER_PREFIX_V3)
             val payload = Base64.decode(base64Payload, Base64.NO_WRAP)
@@ -219,6 +288,10 @@ object EncryptionManager {
             if (version != 3.toByte()) return null
 
             val flags = payload[offset++]
+            val singleUse = (flags.toInt() and 0x01) != 0
+            val ttlOnOpen = (flags.toInt() and 0x04) != 0
+            val hasMaxAttempts = (flags.toInt() and 0x08) != 0
+
             val keyNameSize = payload[offset++]
             val keyName = String(payload, offset, keyNameSize.toInt(), StandardCharsets.UTF_8)
             offset += keyNameSize
@@ -226,6 +299,12 @@ object EncryptionManager {
             val counterSize = payload[offset++]
             val counter = String(payload, offset, counterSize.toInt(), StandardCharsets.UTF_8).toLong()
             offset += counterSize
+
+            val maxAttempts = if (hasMaxAttempts) {
+                payload[offset++].toInt() and 0xFF
+            } else {
+                0
+            }
 
             val salt = payload.copyOfRange(offset, offset + SALT_SIZE)
             offset += SALT_SIZE
@@ -243,7 +322,17 @@ object EncryptionManager {
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
             val decryptedBytes = cipher.doFinal(encryptedBytes)
-            return String(decryptedBytes, StandardCharsets.UTF_8)
+            val plaintext = String(decryptedBytes, StandardCharsets.UTF_8)
+
+            return DecryptedMessage(
+                plaintext = plaintext,
+                keyName = keyName,
+                counter = counter,
+                maxAttempts = maxAttempts,
+                singleUse = singleUse,
+                ttlHours = null, // TODO: Implement TTL
+                ttlOnOpen = ttlOnOpen
+            )
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -251,9 +340,10 @@ object EncryptionManager {
         }
     }
 
-    private fun decryptV2(ciphertext: String, ikm: String, parts: List<String>): String? {
+    private fun decryptV2(ciphertext: String, ikm: String, parts: List<String>): DecryptedMessage? {
         return try {
             if (parts.size < 6) return null
+            val keyName = parts[3]
             val counter = parts[4].toLongOrNull() ?: return null
             val base64Payload = parts.last()
             val saltAndIvAndCiphertext = Base64.decode(base64Payload, Base64.DEFAULT)
@@ -272,17 +362,31 @@ object EncryptionManager {
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
             val decryptedBytes = cipher.doFinal(encryptedBytes)
-            String(decryptedBytes, StandardCharsets.UTF_8)
+            val plaintext = String(decryptedBytes, StandardCharsets.UTF_8)
+
+            val options = parts[2].split(",").filter { it.isNotEmpty() }
+            val singleUse = options.contains(OPTION_SINGLE_USE)
+
+            DecryptedMessage(
+                plaintext = plaintext,
+                keyName = keyName,
+                counter = counter,
+                maxAttempts = 0,
+                singleUse = singleUse,
+                ttlHours = null,
+                ttlOnOpen = false
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
     }
 
-    private fun decryptV1(ciphertext: String, key: String): String? {
+    private fun decryptV1(ciphertext: String, key: String): DecryptedMessage? {
         return try {
             val parts = ciphertext.split("::")
             if (parts.size < 5 || parts[0] != "BCE") return null
+            val keyName = parts[3]
             val base64Payload = parts.last()
             val ivAndCiphertext = Base64.decode(base64Payload, Base64.DEFAULT)
             if (ivAndCiphertext.size < GCM_IV_LENGTH) return null
@@ -293,7 +397,20 @@ object EncryptionManager {
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
             val decryptedBytes = cipher.doFinal(encryptedBytes)
-            String(decryptedBytes, StandardCharsets.UTF_8)
+            val plaintext = String(decryptedBytes, StandardCharsets.UTF_8)
+
+            val options = parts[2].split(",").filter { it.isNotEmpty() }
+            val singleUse = options.contains(OPTION_SINGLE_USE)
+
+            DecryptedMessage(
+                plaintext = plaintext,
+                keyName = keyName,
+                counter = 0,
+                maxAttempts = 0,
+                singleUse = singleUse,
+                ttlHours = null,
+                ttlOnOpen = false
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null // Return null on any error for security; avoids leaking info about why it failed.

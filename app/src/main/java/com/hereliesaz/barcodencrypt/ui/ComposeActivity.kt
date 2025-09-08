@@ -66,12 +66,6 @@ class ComposeActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
-                    screenTitle = stringResource(id = R.string.compose_message),
-                    navigationIcon = {
-                        IconButton(onClick = { finish() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") // Changed
-                        }
-                    },
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -144,6 +138,8 @@ fun ComposeScreen(
     var ttlHours by remember { mutableStateOf("1.0") }
     var ttlStartsOnOpen by remember { mutableStateOf(false) }
     var showKeySelectionDialog by remember { mutableStateOf(false) }
+    var limitAttempts by remember { mutableStateOf(false) }
+    var maxAttempts by remember { mutableStateOf("5") }
 
     LaunchedEffect(barcodes) {
         selectedBarcode = barcodes.firstOrNull()
@@ -175,7 +171,8 @@ fun ComposeScreen(
                             plaintext = message,
                             barcode = barcode,
                             options = options,
-                            password = password
+                            password = password,
+                            maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
                         )
                         if (result != null) {
                             encryptedText = result
@@ -189,6 +186,11 @@ fun ComposeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+        val activity = (LocalContext.current as? Activity)
+        IconButton(onClick = { activity?.finish() }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
 
         Text(
             text = "Select a recipient, type your message, and then encrypt it.",
@@ -244,6 +246,22 @@ fun ComposeScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
+            Checkbox(checked = limitAttempts, onCheckedChange = { limitAttempts = it })
+            Text("Limit decryption attempts:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = maxAttempts,
+                onValueChange = { maxAttempts = it.filter { char -> char.isDigit() } },
+                label = { Text("Attempts") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = limitAttempts,
+                modifier = Modifier.width(120.dp)
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
             Text("Timed message: this message will disappear after a set time.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             OutlinedTextField(
@@ -287,7 +305,8 @@ fun ComposeScreen(
                             val result = viewModel.encryptMessage(
                                 plaintext = message,
                                 barcode = barcode,
-                                options = options
+                                options = options,
+                                maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
                             )
                             if (result != null) {
                                 encryptedText = result

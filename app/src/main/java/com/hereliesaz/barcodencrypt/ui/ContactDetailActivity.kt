@@ -104,12 +104,6 @@ class ContactDetailActivity : ComponentActivity() {
                 var showAssociationDialog by remember { mutableStateOf(false) }
 
                 AppScaffoldWithNavRail(
-                    screenTitle = contactName!!,
-                    navigationIcon = {
-                        IconButton(onClick = { finish() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back_content_description))
-                        }
-                    },
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -394,6 +388,10 @@ fun ContactDetailScreen(
     val associations by viewModel.associations.observeAsState(emptyList())
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        val activity = (LocalContext.current as? Activity)
+        IconButton(onClick = { activity?.finish() }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
         Text(
             text = "Add keys for this contact by scanning barcodes. Then, associate messaging apps with this contact so Barcodencrypt knows which keys to use for which app.",
             style = MaterialTheme.typography.bodyLarge,
