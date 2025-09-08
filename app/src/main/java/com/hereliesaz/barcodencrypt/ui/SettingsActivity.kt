@@ -52,9 +52,13 @@ fun SettingsScreen() {
     val autofillManager = remember { context.getSystemService(AutofillManager::class.java) }
 
     fun isServiceEnabled(): Boolean {
-        return autofillManager != null &&
-                autofillManager.hasEnabledAutofillServices() &&
-                autofillManager.autofillServiceComponentName == ComponentName(context, BarcodeAutofillService::class.java)
+        if (autofillManager == null || !autofillManager.hasEnabledAutofillServices()) {
+            return false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return autofillManager.autofillServiceComponentName == ComponentName(context, BarcodeAutofillService::class.java)
+        }
+        return true
     }
 
     var isEnabled by remember { mutableStateOf(isServiceEnabled()) }

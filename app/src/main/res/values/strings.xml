@@ -60,5 +60,6 @@
     <string name="timed_message">Timed Message</string>
     <string name="duration_seconds">Duration (s)</string>
     <string name="settings">Settings</string>
+    <string name="about">About</string>
 </resources>
 

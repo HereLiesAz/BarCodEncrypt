@@ -230,24 +230,12 @@ fun MainScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            Button(onClick = {
-                val intent = Intent(context, ComposeActivity::class.java)
-                context.startActivity(intent)
-            }) {
-                Text("Compose Message")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedButton(onClick = onManageContactKeys) {
-                Text("Manage Contact Keys")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedButton(onClick = onSettings) {
-                Text("Settings")
-            }
+            com.hereliesaz.barcodencrypt.ui.composable.Home(
+                onManageContactKeys = onManageContactKeys,
+                onComposeMessage = {
+                    context.startActivity(Intent(context, ComposeActivity::class.java))
+                }
+            )
         }
     }
 }
