@@ -11,7 +11,7 @@
     <string name="add_barcode_identifier">Add Barcode Identifier</string>
     <string name="enter_a_unique_identifier_for_this_barcode">Enter a unique identifier for this barcode</string>
     <string name="identifier">Identifier</string>
-    <string name="compose_message">Compose Message</string>
+    <string name="compose_message">Message</string>
     <string name="new_action">New Action</string>
     <string name="select_an_action">Select an Action</string>
     <string name="message">Message</string>
@@ -29,7 +29,7 @@
     <string name="notification_channel_description">Notifications for newly detected encrypted messages.</string>
     <string name="message_detected">Encrypted Message Detected</string>
     <string name="tap_to_decrypt">Tap to begin decryption ritual</string>
-    <string name="waiting_for_scan">Waiting for key...</string>
+    <string name="waiting_for_scan">Waiting for key…</string>
     <string name="incorrect_key">Incorrect Key. The secret is safe.</string>
     <string name="notification_permission_required">Notification Permission Required</string>
     <string name="grant_permission">Grant Permission</string>
@@ -44,7 +44,7 @@
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
     <string name="no_barcodes_assigned">No barcodes assigned. Tap the + to add one.</string>
-    <string name="manage_contact_keys">Manage Contact Keys</string>
+    <string name="manage_contact_keys">Contacts</string>
     <string name="select_a_contact_to_manage_their_keys">Select a contact to manage their keys</string>
     <string name="contacts_permission_required">Contacts Permission Required</string>
     <string name="permission_needed_to_assign_keys_to_contacts">Permission is needed to assign keys to your contacts.</string>

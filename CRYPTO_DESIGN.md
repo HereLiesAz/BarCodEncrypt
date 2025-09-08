@@ -63,3 +63,11 @@ The message header will be updated to version 2 to include the counter.
 -   **Replay Attacks:** To prevent an attacker from re-sending an old, intercepted message, the decrypting client must also store a counter for each key it has a relationship with (the `last_seen_counter`). The client must reject any message where the incoming counter is less than or equal to its stored `last_seen_counter`. After a successful decryption, the client updates its `last_seen_counter` to the value from the message.
 -   **Passphrase Security:** The entire system's security relies on the secrecy of the PRKs stored in the database. For hardening, the database itself should be encrypted at rest using a library like SQLCipher, with a key derived from a user-provided master password via the Android Keystore.
 -   **Counter Synchronization:** If a user restores their data from a backup, their local counter may be out of sync with the sender's. A mechanism to manually reset a key's counter on both the sender's and receiver's devices might be necessary as an advanced feature.
+
+## 6. Password Assistant Feature
+
+The "Password Assistant" feature, which helps users fill password fields, operates outside of the cryptographic model described above.
+
+-   When a user scans a barcode to fill a password, the **raw, un-hashed, un-encrypted value** of the barcode is used directly as the password.
+-   This feature does not use the HKDF or any of the key derivation mechanisms. It is a simple utility to paste the content of a barcode into a text field.
+-   The security of this feature is therefore dependent on the security of the barcode itself and the context in which it is used.
