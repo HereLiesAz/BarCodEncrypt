@@ -17,7 +17,7 @@ android {
         applicationId = "com.hereliesaz.barcodencrypt"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         versionName = "0.6.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
