@@ -8,52 +8,54 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.lifecycle.Observer
-import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.*
+import com.hereliesaz.barcodencrypt.ui.SettingsActivity // Import for accessing SharedPreferences
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.MessageParser
-import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
 class MessageDetectionService : AccessibilityService() {
 
-    private lateinit var associationRepository: AppContactAssociationRepository
-    private lateinit var contactRepository: ContactRepository
-    private lateinit var revokedMessageRepository: RevokedMessageRepository
+    // private lateinit var contactRepository: ContactRepository // No longer directly used for decryption logic here
+    // private lateinit var revokedMessageRepository: RevokedMessageRepository // Will be used by OverlayService
     private lateinit var serviceScope: CoroutineScope
     private val seenMessages = ConcurrentHashMap<String, Long>()
+    private var globallyAssociatedApps: Set<String> = emptySet()
 
     override fun onCreate() {
         super.onCreate()
-        val database = AppDatabase.getDatabase(application)
-        associationRepository = AppContactAssociationRepository(database.appContactAssociationDao())
-        contactRepository = ContactRepository(database.contactDao())
-        revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
+        // val database = AppDatabase.getDatabase(application) // Not needed if repos are not used directly
+        // contactRepository = ContactRepository(database.contactDao()) // Handled by OverlayService
+        // revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao()) // Handled by OverlayService
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        Log.d(TAG, "Watcher service has been created.")
+        globallyAssociatedApps = SettingsActivity.loadAssociatedApps(applicationContext)
+        Log.d(TAG, "Watcher service has been created. Associated apps: $globallyAssociatedApps")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        when (event?.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                val sourceNode = event.source ?: return
-                findEncryptedMessages(sourceNode)
-                // sourceNode.recycle() // Removed
+        val currentPackageName = event?.packageName?.toString() ?: return
+
+        // Refresh associated apps on window change events, in case settings changed.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            globallyAssociatedApps = SettingsActivity.loadAssociatedApps(applicationContext)
+        }
+
+        // Only process events from globally associated apps for message detection
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && globallyAssociatedApps.contains(currentPackageName)) {
+            val sourceNode = event.source ?: return
+            findEncryptedMessages(sourceNode)
+            // sourceNode.recycle() // System handles recycling
+        } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) { // Password field focus can be for any app
+            val sourceNode = event.source ?: return
+            if (sourceNode.isPassword) {
+                val bounds = Rect()
+                sourceNode.getBoundsInScreen(bounds)
+                // PasswordPasteManager.prepareForPaste(sourceNode) // This should likely be in OverlayService or triggered by user action there
+                summonPasswordOverlay(bounds)
+            } else {
+                // PasswordPasteManager.clear() // Similarly, clear if overlay is dismissed
             }
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                val sourceNode = event.source ?: return
-                if (sourceNode.isPassword) {
-                    val bounds = Rect()
-                    sourceNode.getBoundsInScreen(bounds)
-                    PasswordPasteManager.prepareForPaste(sourceNode)
-                    summonPasswordOverlay(bounds)
-                } else {
-                    PasswordPasteManager.clear()
-                }
-                // sourceNode.recycle() // Removed
-            }
+            // sourceNode.recycle() // System handles recycling
         }
     }
 
@@ -72,42 +74,21 @@ class MessageDetectionService : AccessibilityService() {
             val fullMatch = matchResult.value
             val now = System.currentTimeMillis()
 
+            // Check cooldown for this specific message content
             if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
                 seenMessages[fullMatch] = now
+                
+                // Current app's package name should be checked before this point,
+                // ensured by the onAccessibilityEvent logic.
+                Log.d(TAG, "Potential message found in associated app: ${nodeInfo.packageName}")
                 serviceScope.launch {
-                    val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it.toString()) } ?: return@launch
-                    val contactWithBarcodes = contactRepository.getContactWithBarcodesByLookupKeySync(contactLookupKey) ?: return@launch
-
-                    val options = if (fullMatch.startsWith("BCE::")) fullMatch.split("::").getOrNull(2) ?: "" else ""
-                    val messageHash = EncryptionManager.sha256(fullMatch)
-                    if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
-                        revokedMessageRepository.isMessageRevoked(messageHash)
-                    ) {
-                        Log.i(TAG, "Ignoring revoked single-use message.")
+                    val bounds = Rect()
+                    nodeInfo.getBoundsInScreen(bounds)
+                    if (bounds.width() <= 0 || bounds.height() <= 0) {
+                        Log.w(TAG, "Skipping overlay for zero-sized node.")
                         return@launch
                     }
-
-                    val barcodeName = MessageParser.getBarcodeNameFromMessage(fullMatch)
-                    if (barcodeName != null) {
-                        val barcode = contactWithBarcodes.barcodes.find { it.name == barcodeName }
-                        if (barcode != null) {
-                            val bounds = Rect()
-                            nodeInfo.getBoundsInScreen(bounds)
-                            summonDecryptionOverlay(fullMatch, bounds)
-                            return@launch
-                        }
-                    } else { // v1 message
-                        for (barcode in contactWithBarcodes.barcodes) {
-                            barcode.decryptValue()
-                            val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
-                            if (decryptedText != null) {
-                                val bounds = Rect()
-                                nodeInfo.getBoundsInScreen(bounds)
-                                summonDecryptionOverlay(fullMatch, bounds)
-                                return@launch
-                            }
-                        }
-                    }
+                    summonDecryptionOverlay(fullMatch, bounds)
                 }
             }
         }
@@ -120,6 +101,7 @@ class MessageDetectionService : AccessibilityService() {
     private fun summonDecryptionOverlay(encryptedText: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
+            // Optionally, notify user they need to grant permission
             return
         }
 
@@ -127,6 +109,7 @@ class MessageDetectionService : AccessibilityService() {
             action = OverlayService.ACTION_DECRYPT_MESSAGE
             putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
+            // OverlayService will be responsible for fetching contact info and keys
         }
         startService(intent)
     }
@@ -154,6 +137,6 @@ class MessageDetectionService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MessageDetectionService"
-        private const val COOLDOWN_MS = 10_000 // 10 seconds
+        private const val COOLDOWN_MS = 3000 // 3 seconds cooldown for identical messages
     }
 }

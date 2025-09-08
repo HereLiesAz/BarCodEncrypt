@@ -11,30 +11,40 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
+// import androidx.compose.ui.platform.LocalContext // Not directly used in OverlayContent top-level
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.Barcode
-import com.hereliesaz.barcodencrypt.data.BarcodeRepository
+import com.hereliesaz.barcodencrypt.data.ContactRepository
+import com.hereliesaz.barcodencrypt.data.KeyType
 import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import com.hereliesaz.barcodencrypt.ui.PasswordDialog
 import com.hereliesaz.barcodencrypt.ui.PasswordScannerTrampolineActivity
@@ -56,14 +66,14 @@ import kotlinx.coroutines.withContext
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
+    private lateinit var contactRepository: ContactRepository
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private lateinit var decryptionAttemptManager: DecryptionAttemptManager
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
-    private var encryptedText: String? = null
-    private var barcodeName: String? = null
-    private val scannedSequence = mutableListOf<String>()
+    private val overlayState = mutableStateOf<OverlayState>(OverlayState.Hidden)
+    private var currentEncryptedText: String? = null
+    private var activeBounds: Rect? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -71,217 +81,260 @@ class OverlayService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
+        contactRepository = ContactRepository(database.contactDao())
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         decryptionAttemptManager = DecryptionAttemptManager(applicationContext)
+        Log.d(TAG, "OverlayService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand received action: ${intent?.action}")
+        val newBounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+        }
+
+        if (newBounds == null) {
+            Log.w(TAG, "No bounds provided, stopping service.")
+            stopSelfAndRemoveOverlay()
+            return START_NOT_STICKY
+        }
+        activeBounds = newBounds
+
         when (intent?.action) {
             ACTION_DECRYPT_MESSAGE -> {
-                encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
-                val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
-                }
-
-                if (encryptedText == null || bounds == null) {
-                    stopSelf()
+                currentEncryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
+                if (currentEncryptedText == null) {
+                    Log.w(TAG, "ACTION_DECRYPT_MESSAGE: No encrypted text, stopping.")
+                    stopSelfAndRemoveOverlay()
                     return START_NOT_STICKY
                 }
-
-                barcodeName = MessageParser.getBarcodeNameFromMessage(encryptedText!!)
-                overlayState.value = OverlayState.Initial
-                createOverlay(bounds)
+                Log.d(TAG, "ACTION_DECRYPT_MESSAGE: Received text: $currentEncryptedText")
+                overlayState.value = OverlayState.Processing
+                createOrUpdateOverlay(newBounds)
+                attemptGlobalDecryption(currentEncryptedText!!)
             }
             ACTION_SHOW_PASSWORD_ICON -> {
-                val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
-                }
-                if (bounds == null) {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
+                Log.d(TAG, "ACTION_SHOW_PASSWORD_ICON")
                 overlayState.value = OverlayState.PasswordIcon
-                createOverlay(bounds)
+                createOrUpdateOverlay(newBounds)
             }
-            else -> stopSelf()
+            else -> {
+                Log.w(TAG, "Unknown action or no action, stopping service.")
+                stopSelfAndRemoveOverlay()
+            }
         }
         return START_NOT_STICKY
     }
 
-    private fun handleScannedKey(scannedKey: String?) {
-        val fullEncryptedText = encryptedText ?: return
-        val bName = barcodeName
-        if (scannedKey == null || bName == null) {
-            overlayState.value = OverlayState.Failure
-            return
-        }
-
+    private fun attemptGlobalDecryption(encryptedMessage: String) {
         serviceScope.launch(Dispatchers.IO) {
-            val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(application).barcodeDao())
-            val barcode = barcodeRepository.getBarcodeByName(bName)
-            if (barcode == null) {
-                withContext(Dispatchers.Main) {
-                    overlayState.value = OverlayState.Failure
-                }
-                return@launch
-            }
+            Log.d(TAG, "Attempting global decryption for: $encryptedMessage")
+            val barcodeNameFromMessage = MessageParser.getBarcodeNameFromMessage(encryptedMessage)
+            val allContactsWithBarcodes = contactRepository.getAllContactsWithBarcodesSync()
+            var candidateFound = false
 
-            barcode.decryptValue()
-            if (barcode.value != scannedKey) {
-                withContext(Dispatchers.Main) {
-                    overlayState.value = OverlayState.Failure
-                }
-                return@launch
-            }
-
-            if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE) {
-                withContext(Dispatchers.Main) {
-                    overlayState.value = OverlayState.PasswordRequired { password ->
-                        decryptMessage(fullEncryptedText, barcode, password)
+            for (contactWithBarcodes in allContactsWithBarcodes) {
+                for (barcode in contactWithBarcodes.barcodes) {
+                    if (barcodeNameFromMessage != null && barcode.name != barcodeNameFromMessage) {
+                        continue
                     }
-                }
-            } else if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE || barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE) {
-                withContext(Dispatchers.Main) {
-                    overlayState.value = OverlayState.SequenceRequired {
-                        if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE) {
-                            overlayState.value = OverlayState.PasswordRequired { password ->
-                                decryptMessage(fullEncryptedText, barcode, password)
+
+                    val headerInfo = EncryptionManager.parseHeader(encryptedMessage)
+                    val maxAttempts = headerInfo?.maxAttempts ?: 0
+                    val remainingAttempts = decryptionAttemptManager.getRemainingAttempts(encryptedMessage, maxAttempts)
+
+                    if (maxAttempts > 0 && remainingAttempts <= 0) {
+                        Log.w(TAG, "No attempts left for barcode ${barcode.name} and message.")
+                        if (barcodeNameFromMessage != null && barcode.name == barcodeNameFromMessage) {
+                             withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Max decryption attempts reached.") }
+                             return@launch
+                        }
+                        continue
+                    }
+
+                    when (barcode.keyType) {
+                        KeyType.PASSWORD_PROTECTED_BARCODE, KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE -> {
+                            Log.d(TAG, "Candidate key ${barcode.name} requires password.")
+                            withContext(Dispatchers.Main) { overlayState.value = OverlayState.PasswordRequired(barcode) }
+                            candidateFound = true
+                        }
+                        KeyType.BARCODE_SEQUENCE -> {
+                            Log.d(TAG, "Candidate key ${barcode.name} requires sequence.")
+                            withContext(Dispatchers.Main) { overlayState.value = OverlayState.SequenceRequired(barcode, null) }
+                            candidateFound = true
+                        }
+                        KeyType.SINGLE_BARCODE, KeyType.PASSWORD -> {
+                            Log.d(TAG, "Attempting direct decryption with barcode ${barcode.name} (type: ${barcode.keyType})")
+                            val ikm = EncryptionManager.getIkm(barcode, null)
+                            val decrypted = EncryptionManager.decrypt(encryptedMessage, ikm)
+                            if (decrypted != null) {
+                                Log.i(TAG, "Direct decryption successful with barcode: ${barcode.name}")
+                                handleDecryptionResult(encryptedMessage, decrypted)
+                                candidateFound = true
+                            } else {
+                                Log.w(TAG, "Direct decryption failed for barcode ${barcode.name}.")
+                                decryptionAttemptManager.recordFailedAttempt(encryptedMessage, maxAttempts)
+                                 if (barcodeNameFromMessage != null && barcode.name == barcodeNameFromMessage) {
+                                     withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Decryption failed for ${barcode.name}.") }
+                                     return@launch
+                                 }
                             }
-                        } else {
-                            decryptMessage(fullEncryptedText, barcode)
                         }
                     }
+                    if (candidateFound) break
                 }
-            } else {
-                decryptMessage(fullEncryptedText, barcode)
+                if (candidateFound) break
+            }
+
+            if (!candidateFound) {
+                Log.w(TAG, "Global decryption failed: No suitable candidate key found for: $encryptedMessage")
+                withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("No suitable key found.") }
             }
         }
     }
 
-    private fun decryptMessage(fullEncryptedText: String, barcode: Barcode, password: String? = null) {
-        serviceScope.launch(Dispatchers.IO) {
-            val headerInfo = EncryptionManager.parseHeader(fullEncryptedText)
-            val maxAttempts = headerInfo?.maxAttempts ?: 0
+    private fun handlePasswordProvided(submittedBarcode: Barcode, pass: String) {
+        Log.d(TAG, "Password provided for barcode: ${submittedBarcode.name}")
+        currentEncryptedText?.let {
+            if (submittedBarcode.keyType == KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE) {
+                overlayState.value = OverlayState.SequenceRequired(submittedBarcode, pass)
+            } else {
+                decryptSpecificMessage(it, submittedBarcode, pass, null)
+            }
+        } ?: Log.e(TAG, "currentEncryptedText is null in handlePasswordProvided")
+    }
 
-            val remainingAttempts = decryptionAttemptManager.getRemainingAttempts(fullEncryptedText, maxAttempts)
-            if (remainingAttempts <= 0 && maxAttempts > 0) {
-                withContext(Dispatchers.Main) {
-                    overlayState.value = OverlayState.Failure
-                }
+    private fun handleSequenceProvided(submittedBarcode: Barcode, seq: List<String>, passOpt: String?) {
+        Log.d(TAG, "Sequence provided for barcode: ${submittedBarcode.name}, with password: ${passOpt != null}")
+        currentEncryptedText?.let {
+            decryptSpecificMessage(it, submittedBarcode, passOpt, seq)
+        } ?: Log.e(TAG, "currentEncryptedText is null in handleSequenceProvided")
+    }
+
+    private fun decryptSpecificMessage(encryptedMessage: String, barcode: Barcode, passwordOpt: String?, sequenceOpt: List<String>?) {
+        serviceScope.launch(Dispatchers.IO) {
+            Log.d(TAG, "decryptSpecificMessage for barcode: ${barcode.name}")
+            val headerInfo = EncryptionManager.parseHeader(encryptedMessage)
+            val maxAttempts = headerInfo?.maxAttempts ?: 0
+            val remainingAttempts = decryptionAttemptManager.getRemainingAttempts(encryptedMessage, maxAttempts)
+
+            if (maxAttempts > 0 && remainingAttempts <= 0) {
+                Log.w(TAG, "No attempts left for specific decryption of barcode ${barcode.name}.")
+                withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Max decryption attempts reached.") }
                 return@launch
             }
 
-            val ikm = EncryptionManager.getIkm(barcode, password)
-            val decrypted = EncryptionManager.decrypt(fullEncryptedText, ikm)
+            try {
+                val ikm = EncryptionManager.getIkm(barcode, passwordOpt, sequenceOpt)
+                val decrypted = EncryptionManager.decrypt(encryptedMessage, ikm)
+
+                if (decrypted != null) {
+                    Log.i(TAG, "Specific decryption successful with barcode: ${barcode.name}")
+                    handleDecryptionResult(encryptedMessage, decrypted)
+                } else {
+                    Log.w(TAG, "Specific decryption failed for barcode ${barcode.name}.")
+                    decryptionAttemptManager.recordFailedAttempt(encryptedMessage, maxAttempts)
+                    withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Decryption failed.") }
+                }
+            } catch (e: IllegalArgumentException) {
+                 Log.e(TAG, "IKM generation failed for ${barcode.name}: ${e.message}")
+                 withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Key setup error: ${e.message}") }
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during specific decryption for ${barcode.name}", e)
+                withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Unexpected decryption error.") }
+            }
+        }
+    }
+
+    private fun handleDecryptionResult(originalEncryptedText: String, result: EncryptionManager.DecryptionResult) {
+        serviceScope.launch(Dispatchers.IO) {
+            Log.i(TAG, "Handling decryption result for: ${result.keyName}")
+            if (result.singleUse) {
+                val messageHash = EncryptionManager.sha256(originalEncryptedText) // Use original text for hash
+                if (revokedMessageRepository.isMessageRevoked(messageHash)) {
+                    Log.i(TAG, "Message already revoked: $messageHash")
+                    withContext(Dispatchers.Main) { overlayState.value = OverlayState.Failure("Single-use message already read.") }
+                    return@launch
+                }
+            }
 
             withContext(Dispatchers.Main) {
-                if (decrypted != null) {
-                    decryptionAttemptManager.resetAttempts(fullEncryptedText) // Clear attempts on success
-                    val ttlInSeconds = if (decrypted.ttlOnOpen && decrypted.ttlHours != null) {
-                        (decrypted.ttlHours * 3600).toLong()
-                    } else {
-                        null
-                    }
-                    overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
-
-                    if (decrypted.singleUse) {
-                        val messageHash = EncryptionManager.sha256(fullEncryptedText)
+                decryptionAttemptManager.resetAttempts(originalEncryptedText)
+                val ttlInSeconds = if (result.ttlOnOpen && result.ttlHours != null) (result.ttlHours * 3600).toLong() else null
+                overlayState.value = OverlayState.Success(result.plaintext, ttlInSeconds)
+                if (result.singleUse) {
+                    val messageHash = EncryptionManager.sha256(originalEncryptedText)
+                    launch { // Child coroutine for DB op
                         revokedMessageRepository.revokeMessage(messageHash)
-                        Log.i(TAG, "Single-use message has been revoked.")
+                        Log.i(TAG, "Single-use message $messageHash revoked.")
                     }
-                } else {
-                    decryptionAttemptManager.recordFailedAttempt(fullEncryptedText, maxAttempts)
-                    overlayState.value = OverlayState.Failure
                 }
             }
         }
     }
 
     private fun handlePasswordScan() {
-        val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         startActivity(intent)
-        removeOverlay()
-        stopSelf()
+        stopSelfAndRemoveOverlay()
     }
 
-    private fun createOverlay(bounds: Rect) {
-        removeOverlay()
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            bounds.left,
-            bounds.top,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_SECURE,
-            PixelFormat.TRANSLUCENT
-        )
-
-        composeView = ComposeView(this).apply {
-            setContent {
-                BarcodencryptTheme {
-                    OverlayContent(
-                        state = overlayState.value,
-                        scannedSequence = scannedSequence,
-                        barcodeName = barcodeName,
-                        onClick = {
-                            when (overlayState.value) {
-                                is OverlayState.PasswordIcon -> handlePasswordScan()
-                                is OverlayState.SequenceRequired -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            if (result != null) {
-                                                scannedSequence.add(result)
-                                            }
-                                        }
-                                    }
-                                }
-                                else -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            handleScannedKey(result)
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        onFinish = {
-                            removeOverlay()
-                            stopSelf()
-                        }
-                    )
+    private fun createOrUpdateOverlay(bounds: Rect) {
+        activeBounds = bounds
+        if (composeView == null) {
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                bounds.left, bounds.top, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_SECURE,
+                PixelFormat.TRANSLUCENT
+            )
+            composeView = ComposeView(this).apply {
+                setContent {
+                    BarcodencryptTheme {
+                        OverlayContent(
+                            state = overlayState.value,
+                            onPasswordSubmit = { barcode, password -> handlePasswordProvided(barcode, password) },
+                            onSequenceSubmit = { barcode, sequence, passwordAttempt -> handleSequenceProvided(barcode, sequence, passwordAttempt) },
+                            onPasswordIconClick = { handlePasswordScan() },
+                            onDismiss = { stopSelfAndRemoveOverlay() }
+                        )
+                    }
                 }
             }
+            try {
+                windowManager.addView(composeView, params)
+                Log.d(TAG, "Overlay view added.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding overlay view", e)
+                stopSelf()
+            }
+        } else {
+            Log.d(TAG, "Overlay view exists, relying on recomposition for state: ${overlayState.value}")
         }
-        try {
-            windowManager.addView(composeView, params)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error adding overlay view", e)
-        }
+    }
+
+    private fun stopSelfAndRemoveOverlay() {
+        Log.d(TAG, "stopSelfAndRemoveOverlay called.")
+        removeOverlay()
+        stopSelf()
     }
 
     private fun removeOverlay() {
         composeView?.let {
             try {
-                if (it.isAttachedToWindow) windowManager.removeView(it)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing overlay view", e)
-            }
+                if (it.isAttachedToWindow) { windowManager.removeView(it); Log.d(TAG, "Overlay view removed.") }
+            } catch (e: Exception) { Log.e(TAG, "Error removing overlay view", e) }
         }
         composeView = null
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        removeOverlay()
+        Log.d(TAG, "OverlayService destroyed.")
+        stopSelfAndRemoveOverlay()
         serviceScope.cancel()
     }
 
@@ -293,148 +346,113 @@ class OverlayService : Service() {
 }
 
 sealed class OverlayState {
-    object Initial : OverlayState()
+    object Hidden : OverlayState()
+    object Processing : OverlayState()
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
-    object Failure : OverlayState()
+    data class Failure(val message: String = "Decryption Failed") : OverlayState()
     object PasswordIcon : OverlayState()
-    data class PasswordRequired(val onPassword: (String) -> Unit) : OverlayState()
-    data class SequenceRequired(val onSequence: (List<String>) -> Unit) : OverlayState()
+    data class PasswordRequired(val barcode: Barcode) : OverlayState()
+    data class SequenceRequired(val barcode: Barcode, val passwordAttempt: String? = null) : OverlayState()
 }
 
 @Composable
 fun OverlayContent(
     state: OverlayState,
-    scannedSequence: List<String>,
-    barcodeName: String?,
-    onClick: () -> Unit,
-    onFinish: () -> Unit
+    onPasswordSubmit: (barcode: Barcode, password: String) -> Unit,
+    onSequenceSubmit: (barcode: Barcode, sequence: List<String>, passwordAttempt: String?) -> Unit,
+    onPasswordIconClick: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    var visible by remember { mutableStateOf(true) }
     var countdown by remember { mutableStateOf<Long?>(null) }
-    val coroutineScope = rememberCoroutineScope()
+    val collectedSequence = remember { mutableStateListOf<String>() }
+    val coroutineScope = rememberCoroutineScope() // Added for launching suspend functions
 
     LaunchedEffect(state) {
+        if (state !is OverlayState.SequenceRequired) {
+            collectedSequence.clear()
+        }
         when (state) {
             is OverlayState.Success -> {
-                if (state.ttl != null) {
-                    countdown = state.ttl
-                    while (countdown!! > 0) {
-                        delay(1000)
-                        countdown = countdown!! - 1
-                    }
-                    visible = false
-                    onFinish()
-                } else {
-                    delay(5000)
-                    visible = false
-                    onFinish()
+                val displayDuration = if (state.ttl != null) state.ttl * 1000L else 5000L // Ensure Long
+                if (state.ttl != null) countdown = state.ttl
+                var remaining = displayDuration
+                while (remaining > 0) {
+                    delay(1000L.coerceAtMost(remaining)) // Use 1000L
+                    remaining -= 1000L
+                    if (state.ttl != null) countdown = countdown?.minus(1)
                 }
+                onDismiss()
             }
-            is OverlayState.Failure -> {
-                delay(3000)
-                visible = false
-                onFinish()
-            }
-            is OverlayState.PasswordIcon -> {
-                delay(10000)
-                PasswordPasteManager.clear()
-                visible = false
-                onFinish()
-            }
-            else -> {
-            }
+            is OverlayState.Failure -> { delay(3000L); onDismiss() } // Use 3000L
+            is OverlayState.PasswordIcon -> { delay(10000L); PasswordPasteManager.clear(); onDismiss() } // Use 10000L
+            else -> { /* No auto-dismiss */ }
         }
     }
 
-    if (visible) {
-        if (state is OverlayState.SequenceRequired) {
-            val context = LocalContext.current
-            LaunchedEffect(scannedSequence.size) {
-                if (barcodeName != null) {
-                    coroutineScope.launch(Dispatchers.IO) {
-                        val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(context).barcodeDao())
-                        val barcode = barcodeRepository.getBarcodeByName(barcodeName)
-                        if (barcode?.barcodeSequence?.size == scannedSequence.size) {
-                            withContext(Dispatchers.Main) {
-                                state.onSequence(scannedSequence.toList())
+    if (state is OverlayState.Hidden) return
+
+    Box(
+        modifier = Modifier
+            .border(1.dp, if (state is OverlayState.Failure) DisabledRed else Color.DarkGray.copy(alpha = 0.7f))
+            .background(Color.Black.copy(alpha = 0.8f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        when (state) {
+            is OverlayState.Processing -> {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Decrypting...", color = Color.White, fontSize = 14.sp)
+                }
+            }
+            is OverlayState.Success -> {
+                val text = if (countdown != null && countdown!! > 0) "${state.plaintext}\n(Vanishes in $countdown s)" else state.plaintext
+                Text(text, color = Color.White, textAlign = TextAlign.Center, fontSize = 14.sp)
+            }
+            is OverlayState.Failure -> Text(state.message, color = DisabledRed, textAlign = TextAlign.Center, fontSize = 14.sp)
+            is OverlayState.PasswordIcon -> {
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan Barcode for Password",
+                    tint = Color.White, modifier = Modifier.size(36.dp).clickable(onClick = onPasswordIconClick)
+                )
+            }
+            is OverlayState.PasswordRequired -> {
+                PasswordDialog(
+                    onDismiss = onDismiss,
+                    onConfirm = { password -> onPasswordSubmit(state.barcode, password) }
+                )
+            }
+            is OverlayState.SequenceRequired -> {
+                val requiredSize = state.barcode.barcodeSequence?.size ?: 0
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text(
+                        "Scan for ${state.barcode.name}: ${collectedSequence.size} of $requiredSize",
+                        color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = {
+                        coroutineScope.launch { // Launch coroutine for suspend function
+                            ScannerManager.requestScan { result ->
+                                if (result != null) {
+                                    collectedSequence.add(result)
+                                    if (collectedSequence.size == requiredSize) {
+                                        onSequenceSubmit(state.barcode, collectedSequence.toList(), state.passwordAttempt)
+                                        collectedSequence.clear()
+                                    }
+                                }
                             }
                         }
+                    }) {
+                        Text("Scan part ${collectedSequence.size + 1}")
+                    }
+                    if (collectedSequence.isNotEmpty()) {
+                         Spacer(Modifier.height(4.dp))
+                         Text("Parts: ${collectedSequence.joinToString(" | ") { if (it.length > 10) it.substring(0, 10) + "..." else it }}", color = Color.Gray, fontSize = 10.sp)
                     }
                 }
             }
-        }
-
-        if (state is OverlayState.PasswordRequired) {
-            PasswordDialog(
-                onDismiss = { onFinish() },
-                onConfirm = { password ->
-                    state.onPassword(password)
-                }
-            )
-        } else if (state is OverlayState.SequenceRequired) {
-            val context = LocalContext.current
-            var requiredSequenceSize by remember { mutableStateOf(0) }
-            LaunchedEffect(Unit) {
-                val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(context).barcodeDao())
-                val barcode = barcodeRepository.getBarcodeByName(barcodeName!!)
-                requiredSequenceSize = barcode?.barcodeSequence?.size ?: 0
-            }
-            Text("Scan barcode ${scannedSequence.size + 1} of $requiredSequenceSize", color = Color.White)
-        } else {
-            Box(
-                modifier = Modifier
-                    .clickable(enabled = state is OverlayState.Initial, onClick = onClick)
-                    .border(2.dp, if (state is OverlayState.Failure) DisabledRed else Color.Yellow.copy(alpha = 0.7f))
-                    .background(
-                        when (state) {
-                            is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
-                            is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
-                            is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
-                            is OverlayState.PasswordIcon -> Color.White.copy(alpha = 0.2f)
-                            else -> Color.Transparent
-                        }
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                when (state) {
-                    is OverlayState.Initial -> {
-                        Text(
-                            "Tap to Decrypt",
-                            color = Color.White
-                        )
-                    }
-                    is OverlayState.Success -> {
-                        val text = if (countdown != null) {
-                            "${state.plaintext}\n(Vanishes in $countdown...)"
-                        } else {
-                            state.plaintext
-                        }
-                        Text(
-                            text,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    is OverlayState.Failure -> {
-                        Text(
-                            "Incorrect Key",
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    is OverlayState.PasswordIcon -> {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan Barcode for Password",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clickable(onClick = onClick)
-                        )
-                    }
-                    else -> {}
-                }
-            }
+            is OverlayState.Hidden -> {}
         }
     }
 }

@@ -12,16 +12,16 @@ import kotlinx.coroutines.launch
 class ContactDetailViewModel(application: Application, private val contactLookupKey: String) : ViewModel() {
 
     private val barcodeRepository: BarcodeRepository
-    private val associationRepository: AppContactAssociationRepository
+    // private val associationRepository: AppContactAssociationRepository // Removed
     val barcodes: LiveData<List<Barcode>>
-    val associations: LiveData<List<AppContactAssociation>>
+    // val associations: LiveData<List<AppContactAssociation>> // Removed
 
     init {
         val database = AppDatabase.getDatabase(application)
         barcodeRepository = BarcodeRepository(database.barcodeDao())
-        associationRepository = AppContactAssociationRepository(database.appContactAssociationDao())
+        // associationRepository = AppContactAssociationRepository(database.appContactAssociationDao()) // Removed
         barcodes = barcodeRepository.getBarcodesForContact(contactLookupKey)
-        associations = associationRepository.getAssociationsForContact(contactLookupKey)
+        // associations = associationRepository.getAssociationsForContact(contactLookupKey) // Removed
     }
 
     fun createAndInsertBarcode(rawValue: String, password: String? = null, keyType: KeyType = KeyType.SINGLE_BARCODE) = viewModelScope.launch(Dispatchers.IO) {
@@ -32,16 +32,16 @@ class ContactDetailViewModel(application: Application, private val contactLookup
         barcodeRepository.createAndInsertBarcodeSequence(contactLookupKey, sequence, password)
     }
 
-    fun addAssociation(packageName: String) = viewModelScope.launch(Dispatchers.IO) {
-        val association = AppContactAssociation(packageName = packageName, contactLookupKey = contactLookupKey)
-        associationRepository.insert(association)
-    }
+    // fun addAssociation(packageName: String) = viewModelScope.launch(Dispatchers.IO) { // Removed
+    //     val association = AppContactAssociation(packageName = packageName, contactLookupKey = contactLookupKey)
+    //     associationRepository.insert(association)
+    // }
 
-    fun deleteAssociation(associationId: Int) = viewModelScope.launch(Dispatchers.IO) {
-        associationRepository.delete(associationId)
-    }
+    // fun deleteAssociation(associationId: Int) = viewModelScope.launch(Dispatchers.IO) { // Removed
+    //     associationRepository.delete(associationId)
+    // }
 
-    fun deleteBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) { // Added this function
+    fun deleteBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) { 
         barcodeRepository.deleteBarcode(barcode)
     }
 }

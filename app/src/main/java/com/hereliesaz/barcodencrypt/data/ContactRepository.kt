@@ -28,6 +28,10 @@ class ContactRepository(private val contactDao: ContactDao) {
         return contactDao.getContactWithBarcodesByLookupKeySync(contactLookupKey)
     }
 
+    fun getAllContactsWithBarcodesSync(): List<ContactWithBarcodes> { // Added this function
+        return contactDao.getAllContactsWithBarcodesSync()
+    }
+
     /**
      * Inserts a new contact into the database via a coroutine.
      *

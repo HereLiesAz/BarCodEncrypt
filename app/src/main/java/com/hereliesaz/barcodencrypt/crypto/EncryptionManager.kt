@@ -1,75 +1,50 @@
 package com.hereliesaz.barcodencrypt.crypto
 
 import android.util.Base64
+import com.hereliesaz.barcodencrypt.data.Barcode // Added for KeyType access
+import com.hereliesaz.barcodencrypt.data.KeyType // Added
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.security.SecureRandom // Added this import
+import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * The Alchemist.
- *
- * A singleton object responsible for all cryptographic operations in the application.
- * It handles the encryption of plaintext messages into the app's specific format,
- * and the decryption of those messages back into plaintext.
- *
- * The encryption uses AES/GCM, a modern and secure authenticated encryption cipher.
- * The key used for encryption is derived from the user-provided barcode string using SHA-256.
- */
 object EncryptionManager {
 
-    data class DecryptedMessage(
+    // Renamed from DecryptedMessage to DecryptionResult
+    data class DecryptionResult(
         val plaintext: String,
-        val keyName: String,
-        val counter: Long,
-        val maxAttempts: Int,
+        val keyName: String, // Name of the key used/expected
+        val counter: Long,   // Counter value from message (for V2/V3)
+        val maxAttempts: Int,// Max decryption attempts allowed from message header
         val singleUse: Boolean,
-        val ttlHours: Int?,
+        val ttlHours: Double?, // Changed to Double? to match intended use for TTL calculation
         val ttlOnOpen: Boolean
     )
 
     private const val ALGORITHM = "AES"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val KEY_DERIVATION_ALGORITHM = "SHA-256"
-    private const val GCM_IV_LENGTH = 12 // 96 bits is the recommended IV size for GCM
-    private const val GCM_TAG_LENGTH = 128 // in bits
+    private const val GCM_IV_LENGTH = 12
+    private const val GCM_TAG_LENGTH = 128
 
-    /** A message option indicating the message should be viewable only once. */
     const val OPTION_SINGLE_USE = "single-use"
 
-    /**
-     * The format of the v1 message header.
-     */
     private const val HEADER_FORMAT_V1 = "BCE::v1::%s::%s::"
-
-    /**
-     * The format of the v2 message header, which includes a counter for the rolling key.
-     */
     private const val HEADER_FORMAT_V2 = "BCE::v2::%s::%s::%d::"
     private const val HEADER_PREFIX_V3 = "~BCE~"
 
     private const val HMAC_ALGORITHM = "HmacSHA256"
-    private const val SALT_SIZE = 16 // 128 bits
+    private const val SALT_SIZE = 16
 
-    /**
-     * Generates a cryptographically secure random salt.
-     * @return A [ByteArray] containing the salt.
-     */
     fun createSalt(): ByteArray {
         val salt = ByteArray(SALT_SIZE)
         SecureRandom().nextBytes(salt)
         return salt
     }
 
-    /**
-     * The HKDF-Extract function.
-     * @param salt The salt value (a non-secret random value).
-     * @param ikm The input keying material (the secret from the barcode).
-     * @return The pseudorandom key (PRK).
-     */
     private fun hkdfExtract(salt: ByteArray, ikm: String): SecretKeySpec {
         val mac = Mac.getInstance(HMAC_ALGORITHM)
         mac.init(SecretKeySpec(salt, HMAC_ALGORITHM))
@@ -77,13 +52,6 @@ object EncryptionManager {
         return SecretKeySpec(prk, HMAC_ALGORITHM)
     }
 
-    /**
-     * The HKDF-Expand function.
-     * @param prk The pseudorandom key from the extract step.
-     * @param info The context-specific information.
-     * @param length The desired length of the output key in bytes.
-     * @return The output keying material (OKM).
-     */
     private fun hkdfExpand(prk: SecretKeySpec, info: String, length: Int): ByteArray {
         val mac = Mac.getInstance(HMAC_ALGORITHM)
         mac.init(prk)
@@ -105,46 +73,36 @@ object EncryptionManager {
         return result
     }
 
-    /**
-     * Hashes a string using SHA-256.
-     * This is used for deriving a stable encryption key from a barcode string, and for creating
-     * a unique, reproducible hash of a message to use for blacklisting single-use messages.
-     *
-     * @param input The string to hash.
-     * @return The hex string representation of the hash.
-     */
     fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance(KEY_DERIVATION_ALGORITHM)
             .digest(input.toByteArray(StandardCharsets.UTF_8))
         return bytes.fold("") { str, it -> str + "%02x".format(it) }
     }
 
-    /**
-     * Derives a 256-bit AES key from an arbitrary string by hashing it with SHA-256.
-     * @param key The input string, typically the value of a barcode.
-     * @return A [SecretKeySpec] suitable for use with AES.
-     */
     private fun deriveKeyV1(key: String): SecretKeySpec {
         val digest = MessageDigest.getInstance(KEY_DERIVATION_ALGORITHM)
         val keyBytes = digest.digest(key.toByteArray(StandardCharsets.UTF_8))
         return SecretKeySpec(keyBytes, ALGORITHM)
     }
 
-    fun getIkm(barcode: com.hereliesaz.barcodencrypt.data.Barcode, password: String? = null): String {
+    // Updated signature and logic to use sequence parameter
+    fun getIkm(barcode: Barcode, password: String? = null, sequence: List<String>? = null): String {
         return when (barcode.keyType) {
-            com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE -> barcode.value
-            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE -> {
-                if (password == null) throw IllegalArgumentException("Password is required for password-protected key")
+            KeyType.SINGLE_BARCODE -> barcode.value
+            KeyType.PASSWORD_PROTECTED_BARCODE -> {
+                if (password == null) throw IllegalArgumentException("Password is required for password-protected key (${barcode.name})")
                 sha256(barcode.value + password)
             }
-            com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE -> {
-                barcode.barcodeSequence?.joinToString("") ?: ""
+            KeyType.BARCODE_SEQUENCE -> {
+                // Use provided sequence if available, otherwise fallback to stored sequence (if any)
+                (sequence?.joinToString("") ?: barcode.barcodeSequence?.joinToString("")) ?: throw IllegalArgumentException("Sequence is required for sequence key (${barcode.name})")
             }
-            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE -> {
-                if (password == null) throw IllegalArgumentException("Password is required for password-protected key")
-                sha256((barcode.barcodeSequence?.joinToString("") ?: "") + password)
+            KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE -> {
+                if (password == null) throw IllegalArgumentException("Password is required for password-protected sequence key (${barcode.name})")
+                val actualSequenceString = (sequence?.joinToString("") ?: barcode.barcodeSequence?.joinToString("")) ?: throw IllegalArgumentException("Sequence is required for password-protected sequence key (${barcode.name})")
+                sha256(actualSequenceString + password)
             }
-            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD -> barcode.value
+            KeyType.PASSWORD -> barcode.value // This is a raw password stored as a barcode value, likely for autofill cases
         }
     }
 
@@ -156,7 +114,12 @@ object EncryptionManager {
         options: List<String> = emptyList(),
         maxAttempts: Int = 0
     ): String? {
-        return encryptV3(plaintext, ikm, keyName, counter, options, maxAttempts)
+        // Defaulting to V3 for new encryptions
+        var ttlHours: Double? = null
+        options.find { it.startsWith("ttl_hours=") }?.let {
+            ttlHours = it.substringAfter("=").toDoubleOrNull()
+        }
+        return encryptV3(plaintext, ikm, keyName, counter, options, maxAttempts, ttlHours)
     }
 
     private fun encryptV3(
@@ -165,12 +128,13 @@ object EncryptionManager {
         keyName: String,
         counter: Long,
         options: List<String>,
-        maxAttempts: Int
+        maxAttempts: Int,
+        ttlHours: Double? // Added ttlHours here
     ): String? {
         return try {
             val salt = createSalt()
             val prk = hkdfExtract(salt, ikm)
-            val info = "BCEv2|msg|$counter" // V2 HKDF info is compatible with V3
+            val info = "BCEv3|msg|$counter" // Changed info prefix for V3
             val messageKey = hkdfExpand(prk, info, 32)
             val secretKey = SecretKeySpec(messageKey, ALGORITHM)
 
@@ -181,42 +145,41 @@ object EncryptionManager {
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
             val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
 
-            // V3 Header construction
-            val version: Byte = 3
             var flags: Byte = 0
             if (options.contains(OPTION_SINGLE_USE)) flags = (flags.toInt() or 0x01).toByte()
-            if (options.any { it.startsWith("ttl_hours") }) flags = (flags.toInt() or 0x02).toByte()
+            if (ttlHours != null) flags = (flags.toInt() or 0x02).toByte()
             if (options.contains("ttl_on_open=true")) flags = (flags.toInt() or 0x04).toByte()
             if (maxAttempts > 0) flags = (flags.toInt() or 0x08).toByte()
 
-
-            val keyNameBytes = keyName.toByteArray(StandardCharsets.UTF_8)
+            val keyNameBytes = keyName.toByteArray(StandardCharsets.UTF_8).take(255).toByteArray() // Max 255 bytes for keyName
             val counterBytes = counter.toString().toByteArray(StandardCharsets.UTF_8)
 
-            var header = byteArrayOf(version, flags) +
+            var header = byteArrayOf(3.toByte(), flags) +
                     keyNameBytes.size.toByte() + keyNameBytes +
                     counterBytes.size.toByte() + counterBytes
 
             if (maxAttempts > 0) {
                 header += maxAttempts.toByte()
             }
+            if (ttlHours != null) {
+                // Store TTL in minutes (unsigned short, max ~65535 minutes ~45 days)
+                val ttlMinutes = (ttlHours * 60).toInt().coerceIn(0, 65535)
+                header += (ttlMinutes shr 8).toByte() // MSB
+                header += (ttlMinutes and 0xFF).toByte() // LSB
+            }
 
             header += salt + iv
-
             val payload = header + encryptedBytes
             val base64Payload = Base64.encodeToString(payload, Base64.NO_WRAP)
-
             HEADER_PREFIX_V3 + base64Payload
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
     }
-
-    fun parseHeader(ciphertext: String): DecryptedMessage? {
-        // This is a simplified version of decrypt that only parses the header
-        // It doesn't perform any actual decryption.
-        // It uses a dummy IKM because it's required by the decrypt function signature.
+    
+    // Returns DecryptionResult? now
+    fun parseHeader(ciphertext: String): DecryptionResult? {
         return when {
             ciphertext.startsWith(HEADER_PREFIX_V3) -> {
                 try {
@@ -229,6 +192,7 @@ object EncryptionManager {
 
                     val flags = payload[offset++]
                     val singleUse = (flags.toInt() and 0x01) != 0
+                    val hasTtl = (flags.toInt() and 0x02) != 0
                     val ttlOnOpen = (flags.toInt() and 0x04) != 0
                     val hasMaxAttempts = (flags.toInt() and 0x08) != 0
 
@@ -240,22 +204,33 @@ object EncryptionManager {
                     val counter = String(payload, offset, counterSize.toInt(), StandardCharsets.UTF_8).toLong()
                     offset += counterSize
 
-                    val maxAttempts = if (hasMaxAttempts) {
-                        payload[offset++].toInt() and 0xFF
-                    } else {
-                        0
+                    val maxAttempts = if (hasMaxAttempts) payload[offset++].toInt() and 0xFF else 0
+                    
+                    var ttlHours: Double? = null
+                    if (hasTtl) {
+                        if (payload.size < offset + 2) return null // Ensure TTL bytes exist
+                        val ttlMinutes = ((payload[offset++].toInt() and 0xFF) shl 8) or (payload[offset++].toInt() and 0xFF)
+                        ttlHours = ttlMinutes / 60.0
                     }
 
-                    DecryptedMessage(
-                        plaintext = "",
+                    // Salt and IV are parsed but not used for header-only parsing
+                    // val salt = payload.copyOfRange(offset, offset + SALT_SIZE)
+                    // offset += SALT_SIZE
+                    // val iv = payload.copyOfRange(offset, offset + GCM_IV_LENGTH)
+                    // offset += GCM_IV_LENGTH
+                    // val encryptedBytes = payload.copyOfRange(offset, payload.size)
+
+                    DecryptionResult(
+                        plaintext = "", // Not decrypted in header parsing
                         keyName = keyName,
                         counter = counter,
                         maxAttempts = maxAttempts,
                         singleUse = singleUse,
-                        ttlHours = null, // TODO: Implement TTL
+                        ttlHours = ttlHours,
                         ttlOnOpen = ttlOnOpen
                     )
                 } catch (e: Exception) {
+                    e.printStackTrace()
                     null
                 }
             }
@@ -263,7 +238,8 @@ object EncryptionManager {
         }
     }
 
-    fun decrypt(ciphertext: String, ikm: String): DecryptedMessage? {
+    // Returns DecryptionResult? now
+    fun decrypt(ciphertext: String, ikm: String): DecryptionResult? {
         return when {
             ciphertext.startsWith(HEADER_PREFIX_V3) -> decryptV3(ciphertext, ikm)
             ciphertext.startsWith("BCE::") -> {
@@ -278,7 +254,7 @@ object EncryptionManager {
         }
     }
 
-    private fun decryptV3(ciphertext: String, ikm: String): DecryptedMessage? {
+    private fun decryptV3(ciphertext: String, ikm: String): DecryptionResult? {
         try {
             val base64Payload = ciphertext.removePrefix(HEADER_PREFIX_V3)
             val payload = Base64.decode(base64Payload, Base64.NO_WRAP)
@@ -289,6 +265,7 @@ object EncryptionManager {
 
             val flags = payload[offset++]
             val singleUse = (flags.toInt() and 0x01) != 0
+            val hasTtl = (flags.toInt() and 0x02) != 0
             val ttlOnOpen = (flags.toInt() and 0x04) != 0
             val hasMaxAttempts = (flags.toInt() and 0x08) != 0
 
@@ -300,10 +277,13 @@ object EncryptionManager {
             val counter = String(payload, offset, counterSize.toInt(), StandardCharsets.UTF_8).toLong()
             offset += counterSize
 
-            val maxAttempts = if (hasMaxAttempts) {
-                payload[offset++].toInt() and 0xFF
-            } else {
-                0
+            val maxAttempts = if (hasMaxAttempts) payload[offset++].toInt() and 0xFF else 0
+
+            var ttlHours: Double? = null
+            if (hasTtl) {
+                if (payload.size < offset + 2) return null
+                val ttlMinutes = ((payload[offset++].toInt() and 0xFF) shl 8) or (payload[offset++].toInt() and 0xFF)
+                ttlHours = ttlMinutes / 60.0
             }
 
             val salt = payload.copyOfRange(offset, offset + SALT_SIZE)
@@ -314,7 +294,7 @@ object EncryptionManager {
             val encryptedBytes = payload.copyOfRange(offset, payload.size)
 
             val prk = hkdfExtract(salt, ikm)
-            val info = "BCEv2|msg|$counter"
+            val info = "BCEv3|msg|$counter" // Changed info prefix for V3
             val messageKey = hkdfExpand(prk, info, 32)
             val secretKey = SecretKeySpec(messageKey, ALGORITHM)
 
@@ -324,23 +304,22 @@ object EncryptionManager {
             val decryptedBytes = cipher.doFinal(encryptedBytes)
             val plaintext = String(decryptedBytes, StandardCharsets.UTF_8)
 
-            return DecryptedMessage(
+            return DecryptionResult(
                 plaintext = plaintext,
                 keyName = keyName,
                 counter = counter,
                 maxAttempts = maxAttempts,
                 singleUse = singleUse,
-                ttlHours = null, // TODO: Implement TTL
+                ttlHours = ttlHours,
                 ttlOnOpen = ttlOnOpen
             )
-
         } catch (e: Exception) {
             e.printStackTrace()
             return null
         }
     }
 
-    private fun decryptV2(ciphertext: String, ikm: String, parts: List<String>): DecryptedMessage? {
+    private fun decryptV2(ciphertext: String, ikm: String, parts: List<String>): DecryptionResult? {
         return try {
             if (parts.size < 6) return null
             val keyName = parts[3]
@@ -354,7 +333,7 @@ object EncryptionManager {
             val encryptedBytes = saltAndIvAndCiphertext.copyOfRange(SALT_SIZE + GCM_IV_LENGTH, saltAndIvAndCiphertext.size)
 
             val prk = hkdfExtract(salt, ikm)
-            val info = "BCEv2|msg|$counter"
+            val info = "BCEv2|msg|$counter" // V2 HKDF info prefix
             val messageKey = hkdfExpand(prk, info, 32)
             val secretKey = SecretKeySpec(messageKey, ALGORITHM)
 
@@ -366,15 +345,10 @@ object EncryptionManager {
 
             val options = parts[2].split(",").filter { it.isNotEmpty() }
             val singleUse = options.contains(OPTION_SINGLE_USE)
-
-            DecryptedMessage(
-                plaintext = plaintext,
-                keyName = keyName,
-                counter = counter,
-                maxAttempts = 0,
-                singleUse = singleUse,
-                ttlHours = null,
-                ttlOnOpen = false
+            // V2 doesn't have explicit TTL in header, default to no TTL
+            DecryptionResult(
+                plaintext = plaintext, keyName = keyName, counter = counter,
+                maxAttempts = 0, singleUse = singleUse, ttlHours = null, ttlOnOpen = false
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -382,7 +356,7 @@ object EncryptionManager {
         }
     }
 
-    private fun decryptV1(ciphertext: String, key: String): DecryptedMessage? {
+    private fun decryptV1(ciphertext: String, ikm: String): DecryptionResult? {
         return try {
             val parts = ciphertext.split("::")
             if (parts.size < 5 || parts[0] != "BCE") return null
@@ -392,7 +366,7 @@ object EncryptionManager {
             if (ivAndCiphertext.size < GCM_IV_LENGTH) return null
             val iv = ivAndCiphertext.copyOfRange(0, GCM_IV_LENGTH)
             val encryptedBytes = ivAndCiphertext.copyOfRange(GCM_IV_LENGTH, ivAndCiphertext.size)
-            val secretKey = deriveKeyV1(key)
+            val secretKey = deriveKeyV1(ikm) // V1 uses IKM directly for key derivation
             val cipher = Cipher.getInstance(TRANSFORMATION)
             val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
@@ -401,20 +375,14 @@ object EncryptionManager {
 
             val options = parts[2].split(",").filter { it.isNotEmpty() }
             val singleUse = options.contains(OPTION_SINGLE_USE)
-
-            DecryptedMessage(
-                plaintext = plaintext,
-                keyName = keyName,
-                counter = 0,
-                maxAttempts = 0,
-                singleUse = singleUse,
-                ttlHours = null,
-                ttlOnOpen = false
+            // V1 doesn't have explicit TTL in header, default to no TTL
+            DecryptionResult(
+                plaintext = plaintext, keyName = keyName, counter = 0, // V1 has no counter concept
+                maxAttempts = 0, singleUse = singleUse, ttlHours = null, ttlOnOpen = false
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            null // Return null on any error for security; avoids leaking info about why it failed.
+            null
         }
     }
 }
-

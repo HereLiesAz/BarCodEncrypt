@@ -17,6 +17,10 @@ interface ContactDao {
     fun getContactsWithBarcodes(): LiveData<List<ContactWithBarcodes>>
 
     @Transaction
+    @Query("SELECT * FROM contacts")
+    fun getAllContactsWithBarcodesSync(): List<ContactWithBarcodes> // Added this function
+
+    @Transaction
     @Query("SELECT * FROM contacts WHERE lookupKey = :contactLookupKey")
     fun getContactWithBarcodesByLookupKey(contactLookupKey: String): LiveData<ContactWithBarcodes>
 
