@@ -141,7 +141,8 @@ fun ComposeScreen(
     var encryptedText by remember { mutableStateOf("") }
     var isSingleUse by remember { mutableStateOf(false) }
     var isTimed by remember { mutableStateOf(false) }
-    var ttlSeconds by remember { mutableStateOf("60") }
+    var ttlHours by remember { mutableStateOf("1.0") }
+    var ttlStartsOnOpen by remember { mutableStateOf(false) }
     var showKeySelectionDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(barcodes) {
@@ -156,6 +157,13 @@ fun ComposeScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
+        Text(
+            text = "Select a recipient, type your message, and then encrypt it.",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        Text("Select a contact from your address book.", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = onSelectRecipient, modifier = Modifier.fillMaxWidth()) {
             Text(selectRecipientAndKeyButtonText)
         }
@@ -166,9 +174,10 @@ fun ComposeScreen(
             value = selectedContactInfo?.first ?: noRecipientSelectedText
         )
         Spacer(Modifier.height(8.dp))
+        Text("Select the key to use for encryption.", style = MaterialTheme.typography.bodySmall)
         RecipientInfoRow(
             label = keyLabelText,
-            value = selectedBarcode?.identifier ?: noKeySelectedText,
+            value = selectedBarcode?.name ?: noKeySelectedText,
             onClick = {
                 if (barcodes.isNotEmpty()) {
                     showKeySelectionDialog = true
@@ -182,6 +191,7 @@ fun ComposeScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        Text("Type your message here.", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(
             value = message,
             onValueChange = { message = it },
@@ -194,7 +204,7 @@ fun ComposeScreen(
             modifier = Modifier.clickable { isSingleUse = !isSingleUse }
         ) {
             Checkbox(checked = isSingleUse, onCheckedChange = { isSingleUse = it })
-            Text(stringResource(id = R.string.single_use_message), style = MaterialTheme.typography.bodySmall)
+            Text("Single-use message: this message can only be decrypted once.", style = MaterialTheme.typography.bodySmall)
         }
 
         Row(
@@ -202,16 +212,27 @@ fun ComposeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
-            Text(stringResource(id = R.string.timed_message), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Text("Timed message: this message will disappear after a set time.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             OutlinedTextField(
-                value = ttlSeconds,
-                onValueChange = { ttlSeconds = it.filter { char -> char.isDigit() } },
-                label = { Text(stringResource(id = R.string.duration_seconds)) },
+                value = ttlHours,
+                onValueChange = { ttlHours = it.filter { char -> char.isDigit() || char == '.' } },
+                label = { Text("Duration (hours)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 enabled = isTimed,
                 modifier = Modifier.width(120.dp)
             )
         }
+
+        if (isTimed) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { ttlStartsOnOpen = !ttlStartsOnOpen }
+            ) {
+                Checkbox(checked = ttlStartsOnOpen, onCheckedChange = { ttlStartsOnOpen = it })
+                Text("Start timer on message open", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
 
         Spacer(Modifier.height(8.dp))
 
@@ -222,7 +243,10 @@ fun ComposeScreen(
                     coroutineScope.launch {
                         val options = mutableListOf<String>()
                         if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
-                        if (isTimed) options.add("${com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
+                        if (isTimed) {
+                            options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
+                            if(ttlStartsOnOpen) options.add("ttl_on_open=true")
+                        }
 
                         val result = viewModel.encryptMessage(
                             plaintext = message,
@@ -245,7 +269,7 @@ fun ComposeScreen(
 
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = encryptedText, 
+            value = encryptedText,
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(id = R.string.encrypted_message_will_appear_here)) },
@@ -310,7 +334,7 @@ fun KeySelectionDialog(
             Column {
                 barcodes.forEach { barcode ->
                     Text(
-                        text = barcode.identifier,
+                        text = barcode.name,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onKeySelected(barcode) }
@@ -319,7 +343,7 @@ fun KeySelectionDialog(
                 }
                 if (barcodes.isEmpty()) {
                     Text(stringResource(id = R.string.no_barcodes_for_contact))
-                } 
+                }
             }
         },
         confirmButton = {

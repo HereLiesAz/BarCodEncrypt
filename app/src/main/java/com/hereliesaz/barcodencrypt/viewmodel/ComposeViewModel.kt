@@ -61,8 +61,7 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
         return EncryptionManager.encrypt(
             plaintext = plaintext,
             ikm = updatedBarcode.value,
-            salt = EncryptionManager.createSalt(),
-            barcodeIdentifier = updatedBarcode.identifier,
+            keyName = updatedBarcode.name,
             counter = updatedBarcode.counter,
             options = options
         )
