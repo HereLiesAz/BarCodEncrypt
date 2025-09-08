@@ -74,14 +74,18 @@ class SettingsActivity : ComponentActivity() {
 
         fun getInstalledAppsWithNames(context: Context): List<AppInfo> {
             val pm = context.packageManager
-            val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA) // Or 0 if meta-data not needed
+            val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
             return packages.mapNotNull { appInfo ->
                 try {
                     val appName = pm.getApplicationLabel(appInfo).toString()
-                    // Filter out system apps or apps without launch intents if desired, for now, keeping all
-                    AppInfo(appInfo.packageName, appName)
+                    // Filter to include non-system apps and updated system apps
+                    if (((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) || ((appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)) {
+                        AppInfo(appInfo.packageName, appName)
+                    } else {
+                        null // Filter out pure system apps
+                    }
                 } catch (e: Exception) {
-                    null // Skip if app name can't be retrieved
+                    null // Skip if app name can't be retrieved or other error
                 }
             }.sortedBy { it.appName.lowercase() }
         }
