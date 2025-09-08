@@ -35,6 +35,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
+import com.hereliesaz.barcodencrypt.ui.PasswordScannerTrampolineActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
@@ -46,13 +47,17 @@ import kotlinx.coroutines.launch
 /**
  * The Poltergeist.
  *
- * This service is responsible for displaying and managing the overlay UI that appears on top of
- * a detected encrypted message. It is started by [MessageDetectionService].
+ * This service is responsible for displaying and managing all overlays shown by the app.
+ * It is started by [MessageDetectionService] and can be in one of two modes:
+ *
+ * 1.  **Decryption Mode:** It displays a semi-transparent overlay on top of a detected encrypted
+ *     message. This overlay handles the UI flow for scanning a barcode and displaying the
+ *     decrypted result.
+ * 2.  **Password Assistant Mode:** It displays a small, clickable barcode icon next to a
+ *     password field. Tapping the icon initiates the scan-and-paste flow.
  *
  * The overlay is a [ComposeView] managed by the [WindowManager]. It handles its own state
- * (initial, success, failure), initiates the scan via [ScannerManager], and then updates its
- * content with the result of the decryption. It is also responsible for enforcing `single-use`
- * and `ttl` message options.
+ * via the [OverlayState] sealed class and initiates scanning via the [ScannerManager].
  */
 class OverlayService : Service() {
 
@@ -133,16 +138,14 @@ class OverlayService : Service() {
     }
 
     private fun handlePasswordScan() {
-        lifecycleOwner.lifecycleScope.launch {
-            ScannerManager.requestScan { result ->
-                if (result != null) {
-                    com.hereliesaz.barcodencrypt.util.PasswordPasteManager.paste(result)
-                }
-                // After the scan, remove the overlay
-                removeOverlay()
-                stopSelf()
-            }
+        // Since we are starting an activity from a service context, we must add this flag.
+        val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+        startActivity(intent)
+        // The overlay should be removed immediately after starting the scanner
+        removeOverlay()
+        stopSelf()
     }
 
     private fun createOverlay(bounds: Rect) {
@@ -249,24 +252,34 @@ fun OverlayContent(
     var countdown by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state) {
-        if (state is OverlayState.Success) {
-            if (state.ttl != null) {
-                countdown = state.ttl
-                while (countdown!! > 0) {
-                    delay(1000)
-                    countdown = countdown!! - 1
+        when (state) {
+            is OverlayState.Success -> {
+                if (state.ttl != null) {
+                    countdown = state.ttl
+                    while (countdown!! > 0) {
+                        delay(1000)
+                        countdown = countdown!! - 1
+                    }
+                    visible = false
+                    onFinish()
+                } else {
+                    delay(5000) // Default linger for non-timed messages
+                    visible = false
+                    onFinish()
                 }
-                visible = false
-                onFinish()
-            } else {
-                delay(5000) // Default linger for non-timed messages
+            }
+            is OverlayState.Failure -> {
+                delay(3000) // Shorter linger for failure
                 visible = false
                 onFinish()
             }
-        } else if (state is OverlayState.Failure) {
-            delay(3000) // Shorter linger for failure
-            visible = false
-            onFinish()
+            is OverlayState.PasswordIcon -> {
+                delay(10000) // Icon disappears after 10 seconds of inactivity
+                PasswordPasteManager.clear()
+                visible = false
+                onFinish()
+            }
+            else -> { /* No action needed for Initial state */ }
         }
     }
 

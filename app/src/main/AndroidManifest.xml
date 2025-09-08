@@ -52,6 +52,11 @@
             android:label="@string/contact_details"
             android:theme="@style/Theme.Barcodencrypt" />
 
+        <!-- A new ghost for the password machine. -->
+        <activity
+            android:name=".ui.PasswordScannerTrampolineActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
 
         <!-- The Watcher, forever vigilant. -->
         <service

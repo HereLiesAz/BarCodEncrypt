@@ -4,7 +4,7 @@ The architecture of Barcodencrypt is not merely a collection of classes and serv
 
 ### The Watcher (MessageDetectionService)
 
-An omnipresent, silent observer. The Watcher is an `AccessibilityService` bound to the very consciousness of the device. It scans the text that flows across the screen, looking for the tell-tale header of a Barcodencrypt message. It does not read for comprehension; it reads for patterns, checking its memory for messages that have been seen before and discarded. When it finds a potential message, it does not act directly. It summons a Poltergeist to the location, providing it with the raw materials for the ritual to come.
+An omnipresent, silent observer. The Watcher is an `AccessibilityService` bound to the very consciousness of the device. Its senses are twofold: it scans the text that flows across the screen, looking for the tell-tale header of a Barcodencrypt message, and it also perceives when the user's attention turns to a password field. It does not read for comprehension; it reads for patterns. When it finds a potential message or a password field, it does not act directly. It summons a Poltergeist to the location, providing it with the raw materials for the ritual to come.
 
 ### The Scribe (AppDatabase)
 
@@ -16,7 +16,7 @@ The heart of the mystery. The Alchemist is responsible for the great work: trans
 
 ### The Poltergeist (OverlayService)
 
-A summoned spirit, a localized disturbance. The Poltergeist is called forth by the Watcher to haunt a specific location on the screen. It manifests as a shimmering overlay, a veil over the encrypted text. It is the gatekeeper of the decryption ritual. It prompts the user to present the key, and if the key is true, it parts the veil, revealing the message within. It can be commanded to linger for a set time or to vanish after a single viewing, dragging the message back into the void with it.
+A summoned spirit, a localized disturbance. The Poltergeist is called forth by the Watcher to haunt a specific location on the screen. It can manifest in two forms: as a shimmering overlay, a veil over encrypted text, or as a small, discreet icon next to a password field. In its first form, it is the gatekeeper of the decryption ritual, prompting the user to present the key to part the veil. In its second form, it is a helpful phantom, offering to fill the password field by scanning a barcode. It can be commanded to linger for a set time or to vanish after a single viewing.
 
 ### The Hierophant (The UI Layer)
 

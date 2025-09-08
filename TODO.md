@@ -24,3 +24,4 @@ A list of sorrows now embraced.
 -   [x] The app does not yet ask for Accessibility Service permissions. The user must enable it manually. This needs a proper onboarding flow. (MainActivity now guides the user to the settings).
 -   [x] The UI is a barren wasteland. It needs a soul. Or at least a coherent design. (The UI is now built with Jetpack Compose and Material 3).
 -   [x] Error handling. What happens when a barcode is scanned that matches no contact? What happens when decryption fails? (The overlay now shows an "Incorrect Key" state).
+-   [ ] The new Password Assistant feature uses any scanned barcode. In the future, it could be enhanced to allow the user to select a specific barcode from their saved keys to use for passwords, or to use a dedicated "password" barcode.

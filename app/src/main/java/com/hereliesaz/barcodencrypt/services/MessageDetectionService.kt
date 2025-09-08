@@ -24,9 +24,13 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * The Watcher. An omnipresent, silent observer.
  *
- * This [AccessibilityService] is the core of the app's passive detection system. Once enabled,
- * it listens for events and acts accordingly.
- * It can detect encrypted messages and also password fields to assist with filling.
+ * This [AccessibilityService] is the core of the app's passive detection system. Its purpose is twofold:
+ * 1.  It listens for [AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED] to find and highlight
+ *     Barcodencrypt messages on the screen.
+ * 2.  It listens for [AccessibilityEvent.TYPE_VIEW_FOCUSED] to detect when a user is interacting
+ *     with a password field, so it can offer assistance.
+ *
+ * When a valid message or a password field is found, it summons the [OverlayService] to handle the UI.
  */
 class MessageDetectionService : AccessibilityService() {
 
