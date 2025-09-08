@@ -1,6 +1,7 @@
 package com.hereliesaz.barcodencrypt.data
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.map
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -18,11 +19,21 @@ interface BarcodeDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertBarcode(barcode: Barcode)
 
-    @Query("SELECT * FROM barcodes WHERE identifier = :identifier LIMIT 1")
-    suspend fun getBarcodeByIdentifier(identifier: String): Barcode?
+    @Query("SELECT * FROM barcodes WHERE name = :name LIMIT 1")
+    suspend fun getBarcodeByName(name: String): Barcode?
 
-    @Query("SELECT * FROM barcodes WHERE contactLookupKey = :contactLookupKey ORDER BY identifier ASC")
-    fun getBarcodesForContact(contactLookupKey: String): LiveData<List<Barcode>>
+    /**
+     * Retrieves all barcodes for a contact and ensures their values are decrypted.
+     */
+    fun getBarcodesForContact(contactLookupKey: String): LiveData<List<Barcode>> {
+        return getBarcodesForContactRaw(contactLookupKey).map { barcodes ->
+            barcodes.onEach { it.decryptValue() }
+        }
+    }
+
+    @Query("SELECT * FROM barcodes WHERE contactLookupKey = :contactLookupKey ORDER BY name ASC")
+    fun getBarcodesForContactRaw(contactLookupKey: String): LiveData<List<Barcode>>
+
 
     @Delete
     suspend fun deleteBarcode(barcode: Barcode)

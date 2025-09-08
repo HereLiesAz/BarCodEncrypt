@@ -117,10 +117,16 @@ class OverlayService : Service() {
 
             if (decrypted != null) {
                 val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
-                val ttlString = options.split(',').find { it.startsWith(EncryptionManager.OPTION_TTL_PREFIX) }
-                val ttl = ttlString?.removePrefix(EncryptionManager.OPTION_TTL_PREFIX)?.toLongOrNull()
+                val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
+                val ttlHours = ttlHoursString?.removePrefix("ttl_hours=")?.toDoubleOrNull()
+                val ttlOnOpen = options.contains("ttl_on_open=true")
 
-                overlayState.value = OverlayState.Success(decrypted, ttl)
+                var ttlInSeconds: Long? = null
+                if (ttlHours != null && ttlOnOpen) {
+                    ttlInSeconds = (ttlHours * 3600).toLong()
+                }
+
+                overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
 
                 if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                     lifecycleOwner.lifecycleScope.launch {
