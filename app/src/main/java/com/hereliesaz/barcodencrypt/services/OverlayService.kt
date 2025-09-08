@@ -13,6 +13,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +38,7 @@ import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
+import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import com.hereliesaz.barcodencrypt.util.ScannerManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -72,15 +77,30 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        encryptedText = intent?.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
-        correctKey = intent?.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
-        val bounds = intent?.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+        when (intent?.action) {
+            ACTION_DECRYPT_MESSAGE -> {
+                encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
+                correctKey = intent.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
+                val bounds = intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
 
-        if (encryptedText == null || correctKey == null || bounds == null) {
-            stopSelf()
-            return START_NOT_STICKY
+                if (encryptedText == null || correctKey == null || bounds == null) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                overlayState.value = OverlayState.Initial
+                createOverlay(bounds)
+            }
+            ACTION_SHOW_PASSWORD_ICON -> {
+                val bounds = intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                if (bounds == null) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                overlayState.value = OverlayState.PasswordIcon
+                createOverlay(bounds)
+            }
+            else -> stopSelf()
         }
-        createOverlay(bounds)
         return START_NOT_STICKY
     }
 
@@ -112,6 +132,19 @@ class OverlayService : Service() {
         }
     }
 
+    private fun handlePasswordScan() {
+        lifecycleOwner.lifecycleScope.launch {
+            ScannerManager.requestScan { result ->
+                if (result != null) {
+                    com.hereliesaz.barcodencrypt.util.PasswordPasteManager.paste(result)
+                }
+                // After the scan, remove the overlay
+                removeOverlay()
+                stopSelf()
+            }
+        }
+    }
+
     private fun createOverlay(bounds: Rect) {
         removeOverlay()
 
@@ -133,9 +166,14 @@ class OverlayService : Service() {
                     OverlayContent(
                         state = overlayState.value,
                         onClick = {
-                            lifecycleOwner.lifecycleScope.launch {
-                                ScannerManager.requestScan { result ->
-                                    handleScannedKey(result)
+                            when (overlayState.value) {
+                                is OverlayState.PasswordIcon -> handlePasswordScan()
+                                else -> {
+                                    lifecycleOwner.lifecycleScope.launch {
+                                        ScannerManager.requestScan { result ->
+                                            handleScannedKey(result)
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -173,6 +211,8 @@ class OverlayService : Service() {
 
     companion object {
         const val TAG = "OverlayService"
+        const val ACTION_DECRYPT_MESSAGE = "com.hereliesaz.barcodencrypt.ACTION_DECRYPT_MESSAGE"
+        const val ACTION_SHOW_PASSWORD_ICON = "com.hereliesaz.barcodencrypt.ACTION_SHOW_PASSWORD_ICON"
     }
 }
 
@@ -180,12 +220,14 @@ class OverlayService : Service() {
  * Represents the different states of the overlay UI.
  */
 sealed class OverlayState {
-    /** The initial state, before a scan has been attempted. The UI prompts the user to tap. */
+    /** The initial state for message decryption, before a scan has been attempted. */
     object Initial : OverlayState()
     /** The state after a successful decryption. The UI shows the plaintext. */
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
     /** The state after a failed decryption. The UI shows an error. */
     object Failure : OverlayState()
+    /** The state where the overlay is just an icon next to a password field. */
+    object PasswordIcon : OverlayState()
 }
 
 /**
@@ -266,6 +308,16 @@ fun OverlayContent(
                         "Incorrect Key",
                         color = Color.White,
                         textAlign = TextAlign.Center
+                    )
+                }
+                is OverlayState.PasswordIcon -> {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = "Scan Barcode for Password",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable(onClick = onClick)
                     )
                 }
             }

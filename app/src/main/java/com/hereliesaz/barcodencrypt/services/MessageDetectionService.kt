@@ -13,6 +13,7 @@ import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.BarcodeRepository
 import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
 import com.hereliesaz.barcodencrypt.util.Constants
+import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,12 +25,8 @@ import java.util.concurrent.ConcurrentHashMap
  * The Watcher. An omnipresent, silent observer.
  *
  * This [AccessibilityService] is the core of the app's passive detection system. Once enabled,
- * it listens for [AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED] events, which fire whenever
- * the content on the screen is updated. It then recursively traverses the view hierarchy
- * (represented by [AccessibilityNodeInfo] objects) to find text that matches the
- * Barcodencrypt message format.
- *
- * When a valid message is found, it summons the [OverlayService] to handle the decryption UI.
+ * it listens for events and acts accordingly.
+ * It can detect encrypted messages and also password fields to assist with filling.
  */
 class MessageDetectionService : AccessibilityService() {
 
@@ -55,13 +52,27 @@ class MessageDetectionService : AccessibilityService() {
 
     /**
      * The entry point for all accessibility events. It filters for window content changes
-     * and begins the search for encrypted messages from the root node of the event.
+     * and view focused events.
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            val sourceNode = event.source ?: return
-            findEncryptedMessages(sourceNode)
-            sourceNode.recycle()
+        when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                val sourceNode = event.source ?: return
+                findEncryptedMessages(sourceNode)
+                sourceNode.recycle()
+            }
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                val sourceNode = event.source ?: return
+                if (sourceNode.isPassword) {
+                    val bounds = Rect()
+                    sourceNode.getBoundsInScreen(bounds)
+                    PasswordPasteManager.prepareForPaste(sourceNode)
+                    summonPasswordOverlay(bounds)
+                } else {
+                    PasswordPasteManager.clear()
+                }
+                sourceNode.recycle()
+            }
         }
     }
 
@@ -108,7 +119,7 @@ class MessageDetectionService : AccessibilityService() {
                                 val bounds = Rect()
                                 nodeInfo.getBoundsInScreen(bounds)
                                 Log.i(TAG, "MATCH CONFIRMED: Identifier '$identifier' at $bounds.")
-                                summonOverlay(fullMatch, barcode.value, bounds)
+                                summonDecryptionOverlay(fullMatch, barcode.value, bounds)
                             }
                         }
                     }
@@ -123,21 +134,40 @@ class MessageDetectionService : AccessibilityService() {
     }
 
     /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen.
+     * Summons the Poltergeist (the OverlayService) to manifest on screen for message decryption.
      *
      * @param encryptedText The full encrypted payload.
      * @param correctKey The true key required for decryption.
      * @param bounds The screen coordinates where the message was found.
      */
-    private fun summonOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
+    private fun summonDecryptionOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
             return
         }
 
         val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_DECRYPT_MESSAGE
             putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
             putExtra(Constants.IntentKeys.CORRECT_KEY, correctKey)
+            putExtra(Constants.IntentKeys.BOUNDS, bounds)
+        }
+        startService(intent)
+    }
+
+    /**
+     * Summons the Poltergeist (the OverlayService) to manifest on screen for password filling.
+     *
+     * @param bounds The screen coordinates where the password field was found.
+     */
+    private fun summonPasswordOverlay(bounds: Rect) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Cannot summon overlay: permission not granted.")
+            return
+        }
+
+        val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_SHOW_PASSWORD_ICON
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
         }
         startService(intent)

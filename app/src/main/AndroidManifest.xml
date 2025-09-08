@@ -46,11 +46,6 @@
             android:label="@string/compose_message"
             android:theme="@style/Theme.Barcodencrypt" />
 
-        <!-- The Ghost's Trampoline. An invisible helper. -->
-        <activity
-            android:name=".ui.ScannerTrampolineActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
         <!-- The Archives. -->
         <activity
             android:name=".ui.ContactDetailActivity"

@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                         }
-                    }
+                    },
                 )
             }
         }
