@@ -86,16 +86,25 @@ class MessageDetectionService : AccessibilityService() {
                         return@launch
                     }
 
-                    for (barcode in contactWithBarcodes.barcodes) {
-                        barcode.decryptValue()
-                        val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
-                        if (decryptedText != null) {
+                    val barcodeName = getBarcodeNameFromMessage(fullMatch)
+                    if (barcodeName != null) {
+                        val barcode = contactWithBarcodes.barcodes.find { it.name == barcodeName }
+                        if (barcode != null) {
                             val bounds = Rect()
                             nodeInfo.getBoundsInScreen(bounds)
-                            withContext(Dispatchers.Main) {
-                                summonDecryptionOverlay(decryptedText, bounds)
-                            }
+                            summonDecryptionOverlay(fullMatch, bounds)
                             return@launch
+                        }
+                    } else { // v1 message
+                        for (barcode in contactWithBarcodes.barcodes) {
+                            barcode.decryptValue()
+                            val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
+                            if (decryptedText != null) {
+                                val bounds = Rect()
+                                nodeInfo.getBoundsInScreen(bounds)
+                                summonDecryptionOverlay(fullMatch, bounds)
+                                return@launch
+                            }
                         }
                     }
                 }
@@ -107,7 +116,25 @@ class MessageDetectionService : AccessibilityService() {
         }
     }
 
-    private fun summonDecryptionOverlay(decryptedText: String, bounds: Rect) {
+    private fun getBarcodeNameFromMessage(message: String): String? {
+        val parts = message.split("::")
+        return when {
+            message.startsWith("BCE::v2") && parts.size >= 4 -> parts[3]
+            message.startsWith("~BCE~") -> {
+                try {
+                    val payload = android.util.Base64.decode(message.removePrefix("~BCE~"), android.util.Base64.NO_WRAP)
+                    var offset = 2 // skip version and flags
+                    val keyNameSize = payload[offset++]
+                    String(payload, offset, keyNameSize.toInt(), Charsets.UTF_8)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun summonDecryptionOverlay(encryptedText: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
             return
@@ -115,7 +142,7 @@ class MessageDetectionService : AccessibilityService() {
 
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_DECRYPT_MESSAGE
-            putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, decryptedText)
+            putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
         }
         startService(intent)

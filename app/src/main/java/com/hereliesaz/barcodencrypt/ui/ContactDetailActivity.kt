@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack // MODIFIED
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
@@ -29,24 +30,47 @@ import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
-import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
+
+sealed class KeyCreationState {
+    object Idle : KeyCreationState()
+    data class AwaitingPassword(val barcodeValue: String) : KeyCreationState()
+    data class AwaitingPasswordInput(val barcodeValue: String) : KeyCreationState()
+    data class AwaitingSequenceScan(val sequence: List<String>) : KeyCreationState()
+    data class AwaitingSequencePassword(val sequence: List<String>) : KeyCreationState()
+    data class AwaitingSequencePasswordInput(val sequence: List<String>) : KeyCreationState()
+}
 
 class ContactDetailActivity : ComponentActivity() {
 
     private lateinit var viewModel: ContactDetailViewModel
     private var contactLookupKey: String? = null
     private var contactName: String? = null
+    private var keyCreationState by mutableStateOf<KeyCreationState>(KeyCreationState.Idle)
 
     private val scanResultLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
                 val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
                 if (!barcodeValue.isNullOrBlank()) {
-                    viewModel.createAndInsertBarcode(barcodeValue)
-                    Toast.makeText(this, getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                    keyCreationState = KeyCreationState.AwaitingPassword(barcodeValue)
+                }
+            }
+        }
+
+    private val scanSequenceLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
+                if (!barcodeValue.isNullOrBlank()) {
+                    val currentState = keyCreationState
+                    if (currentState is KeyCreationState.AwaitingSequenceScan) {
+                        val newSequence = currentState.sequence + barcodeValue
+                        keyCreationState = KeyCreationState.AwaitingSequenceScan(newSequence)
+                    }
                 }
             }
         }
@@ -70,7 +94,7 @@ class ContactDetailActivity : ComponentActivity() {
                     screenTitle = contactName!!,
                     navigationIcon = {
                         IconButton(onClick = { finish() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back_content_description)) // MODIFIED
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back_content_description))
                         }
                     },
                     onNavigateToManageKeys = {
@@ -90,41 +114,147 @@ class ContactDetailActivity : ComponentActivity() {
                     },
                     floatingActionButton = {
                         FloatingActionButton(onClick = {
-                            val intent = Intent(this, ScannerActivity::class.java)
-                            scanResultLauncher.launch(intent)
+                            keyCreationState = KeyCreationState.Idle
                         }) {
                             Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_barcode_content_description))
                         }
                     },
                     screenContent = {
-                        var showDialog by remember { mutableStateOf(false) }
-
-                        if (showDialog) {
-                            AddAssociationDialog(
-                                onDismiss = { showDialog = false },
-                                onConfirm = { packageName ->
-                                    viewModel.addAssociation(packageName)
-                                    showDialog = false
-                                },
-                                installedApps = getInstalledApps()
-                            )
-                        }
-
-                        ContactDetailScreen(
+                        KeyCreationScreen(
+                            keyCreationState = keyCreationState,
+                            onKeyCreationStateChange = { keyCreationState = it },
                             viewModel = viewModel,
-                            onAddAssociation = { showDialog = true }
+                            scanResultLauncher = scanResultLauncher,
+                            scanSequenceLauncher = scanSequenceLauncher
                         )
                     }
                 )
             }
         }
     }
+}
 
-    private fun getInstalledApps(): List<String> {
-        val pm = packageManager
-        val packages = pm.getInstalledApplications(0)
-        return packages.map { it.packageName }.sorted()
+@Composable
+fun KeyCreationScreen(
+    keyCreationState: KeyCreationState,
+    onKeyCreationStateChange: (KeyCreationState) -> Unit,
+    viewModel: ContactDetailViewModel,
+    scanResultLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
+    scanSequenceLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
+) {
+    val context = LocalContext.current
+    when (val state = keyCreationState) {
+        is KeyCreationState.Idle -> {
+            KeyTypeSelectionDialog(
+                onDismiss = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                onKeyTypeSelected = { keyType ->
+                    when (keyType) {
+                        com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE -> {
+                            val intent = Intent(context, ScannerActivity::class.java)
+                            scanResultLauncher.launch(intent)
+                        }
+                        com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE -> {
+                            onKeyCreationStateChange(KeyCreationState.AwaitingSequenceScan(emptyList()))
+                        }
+                        else -> {}
+                    }
+                }
+            )
+        }
+        is KeyCreationState.AwaitingPasswordInput -> {
+            PasswordDialog(
+                onDismiss = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                onConfirm = { password ->
+                    viewModel.createAndInsertBarcode(state.barcodeValue, password)
+                    onKeyCreationStateChange(KeyCreationState.Idle)
+                    Toast.makeText(context, context.getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+        is KeyCreationState.AwaitingPassword -> {
+            AlertDialog(
+                onDismissRequest = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                title = { Text("Password Protection") },
+                text = { Text("Do you want to protect this key with a password?") },
+                confirmButton = {
+                    Button(onClick = {
+                        onKeyCreationStateChange(KeyCreationState.AwaitingPasswordInput(state.barcodeValue))
+                    }) {
+                        Text("Yes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        viewModel.createAndInsertBarcode(state.barcodeValue)
+                        onKeyCreationStateChange(KeyCreationState.Idle)
+                        Toast.makeText(context, context.getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("No")
+                    }
+                }
+            )
+        }
+        is KeyCreationState.AwaitingSequenceScan -> {
+            AlertDialog(
+                onDismissRequest = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                title = { Text("Scan Barcode Sequence") },
+                text = { Text("You have scanned ${state.sequence.size} barcodes. Do you want to scan another one?") },
+                confirmButton = {
+                    Button(onClick = {
+                        val intent = Intent(context, ScannerActivity::class.java)
+                        scanSequenceLauncher.launch(intent)
+                    }) {
+                        Text("Scan Next")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        onKeyCreationStateChange(KeyCreationState.AwaitingSequencePassword(state.sequence))
+                    }) {
+                        Text("Finish")
+                    }
+                }
+            )
+        }
+        is KeyCreationState.AwaitingSequencePassword -> {
+            AlertDialog(
+                onDismissRequest = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                title = { Text("Password Protection") },
+                text = { Text("Do you want to protect this key sequence with a password?") },
+                confirmButton = {
+                    Button(onClick = {
+                        onKeyCreationStateChange(KeyCreationState.AwaitingSequencePasswordInput(state.sequence))
+                    }) {
+                        Text("Yes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        viewModel.createAndInsertBarcodeSequence(state.sequence)
+                        onKeyCreationStateChange(KeyCreationState.Idle)
+                        Toast.makeText(context, context.getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("No")
+                    }
+                }
+            )
+        }
+        is KeyCreationState.AwaitingSequencePasswordInput -> {
+            PasswordDialog(
+                onDismiss = { onKeyCreationStateChange(KeyCreationState.Idle) },
+                onConfirm = { password ->
+                    viewModel.createAndInsertBarcodeSequence(state.sequence, password)
+                    onKeyCreationStateChange(KeyCreationState.Idle)
+                    Toast.makeText(context, context.getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
+
+    ContactDetailScreen(
+        viewModel = viewModel,
+        onAddAssociation = { }
+    )
 }
 
 @Composable
@@ -167,6 +297,40 @@ fun AddAssociationDialog(
             }
         },
         dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun KeyTypeSelectionDialog(
+    onDismiss: () -> Unit,
+    onKeyTypeSelected: (com.hereliesaz.barcodencrypt.data.KeyType) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Key Type") },
+        text = {
+            Column {
+                Text(
+                    text = "Single Barcode",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onKeyTypeSelected(com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE) }
+                        .padding(vertical = 12.dp)
+                )
+                Text(
+                    text = "Barcode Sequence",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onKeyTypeSelected(com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE) }
+                        .padding(vertical = 12.dp)
+                )
+            }
+        },
+        confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
@@ -238,11 +402,18 @@ fun BarcodeItem(
     ListItem(
         headlineContent = { Text(barcode.name) },
         supportingContent = {
-            Text(
-                "Counter: ${barcode.counter}",
-                maxLines = 1,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Column {
+                Text(
+                    "Counter: ${barcode.counter}",
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Type: ${barcode.keyType}",
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     )
 }

@@ -20,6 +20,15 @@ While holes in a safe make for a way in, holes can be filled. Walls can be made 
 3.  **Compose:** From the main screen, select "Compose Message". Select your recipient and the specific key you want to use for them.
 4.  **Encrypt & Share:** Write your message, choose your options (single-use or timed), and tap "Encrypt". The encrypted text can then be copied to the clipboard and pasted into any other application.
 
+### Advanced Key Types
+
+BarCodEncrypt supports two advanced key types for enhanced security:
+
+*   **Password-Protected Keys:** When creating a key, you can choose to protect it with a password. When encrypting or decrypting with this key, you will be prompted to enter the password. The key is derived from both the barcode and the password, so an attacker would need both to compromise your messages.
+*   **Barcode Sequence Keys:** You can use a sequence of barcodes as a single key. When creating the key, you can scan multiple barcodes in a specific order. To encrypt or decrypt, you will need to scan the same barcodes in the same order. This adds another layer of security, as an attacker would need to know the correct sequence of barcodes.
+
+You can also combine these two features to create a password-protected barcode sequence key.
+
 ### Decryption
 1.  **Enable Service:** From the main screen, enable the "Watcher Service" and grant the necessary Accessibility and Overlay permissions.
 2.  **Detect:** When an encrypted message appears on screen (e.g., in a text message or email), the Watcher service will detect it and place a semi-transparent yellow overlay on it.
