@@ -25,7 +25,9 @@ import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.services.MessageDetectionService
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.ContactDetailActivity
-import com.hereliesaz.barcodencrypt.ui.ScannerActivity // Added import for ScannerActivity
+import com.hereliesaz.barcodencrypt.ui.ScannerActivity
+import com.hereliesaz.barcodencrypt.ui.SettingsActivity // Added
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail // Added
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
@@ -113,25 +115,44 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BarcodencryptTheme {
-                MainScreen(
-                    viewModel = viewModel,
-                    onRequestNotificationPermission = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
+                val context = LocalContext.current
+                val onManageContactKeysLambda = {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        this, Manifest.permission.READ_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasPermission) {
+                        contactPickerLauncher.launch(
+                            Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+                        )
+                    } else {
+                        contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                    }
+                }
+
+                AppScaffoldWithNavRail(
+                    screenTitle = "Barcodencrypt",
+                    onNavigateToManageKeys = onManageContactKeysLambda,
+                    onNavigateToCompose = {
+                        startActivity(Intent(this, ComposeActivity::class.java).apply {
+                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
                     },
-                    onManageContactKeys = {
-                        val hasPermission = ContextCompat.checkSelfPermission(
-                            this, Manifest.permission.READ_CONTACTS
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) {
-                            contactPickerLauncher.launch(
-                                Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
-                            )
-                        } else {
-                            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                        }
+                    onNavigateToSettings = {
+                         startActivity(Intent(this, SettingsActivity::class.java).apply {
+                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                         })
                     },
+                    screenContent = {
+                        MainScreen(
+                            viewModel = viewModel,
+                            onRequestNotificationPermission = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            },
+                            onManageContactKeys = onManageContactKeysLambda
+                        )
+                    }
                 )
             }
         }
@@ -183,7 +204,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
@@ -196,48 +216,41 @@ fun MainScreen(
     val contactsPermissionGranted by viewModel.contactsPermissionStatus.observeAsState(initial = false)
     val overlayPermissionGranted by viewModel.overlayPermissionStatus.observeAsState(initial = false)
 
+    // Removed Scaffold and TopAppBar from here
+    Column(
+        modifier = Modifier.padding(16.dp).fillMaxSize(), // Added padding here for content
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ServiceStatusCard(serviceEnabled = serviceEnabled)
+        if (serviceEnabled) {
+            OverlayPermissionCard(
+                isGranted = overlayPermissionGranted,
+                onRequest = {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                }
+            )
+        }
+        Spacer(Modifier.height(16.dp))
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Barcodencrypt") }) }
-    ) { padding ->
-        Column(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            ServiceStatusCard(serviceEnabled = serviceEnabled)
-            if (serviceEnabled) {
-                // Hiding the notification permission card as the overlay is the primary method now.
-                // NotificationPermissionCard(isGranted = notificationPermissionGranted, onRequest = onRequestNotificationPermission)
+        ContactsPermissionCard(isGranted = contactsPermissionGranted, onRequest = onManageContactKeys)
 
-                OverlayPermissionCard(
-                    isGranted = overlayPermissionGranted,
-                    onRequest = {
-                        val intent = Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                        context.startActivity(intent)
-                    }
-                )
-            }
-            Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(32.dp))
 
-            ContactsPermissionCard(isGranted = contactsPermissionGranted, onRequest = onManageContactKeys)
+        Button(onClick = {
+            val intent = Intent(context, ComposeActivity::class.java)
+            context.startActivity(intent)
+        }) {
+            Text("Compose Message")
+        }
 
-            Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(16.dp))
 
-            Button(onClick = {
-                val intent = Intent(context, ComposeActivity::class.java)
-                context.startActivity(intent)
-            }) {
-                Text("Compose Message")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedButton(onClick = onManageContactKeys) {
-                Text("Manage Contact Keys")
-            }
+        OutlinedButton(onClick = onManageContactKeys) {
+            Text("Manage Contact Keys")
         }
     }
 }

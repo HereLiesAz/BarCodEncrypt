@@ -293,6 +293,7 @@ fun OverlayContent(
                         is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
                         is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
                         is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
+                        is OverlayState.PasswordIcon -> Color.White.copy(alpha = 0.2f)
                     }
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)

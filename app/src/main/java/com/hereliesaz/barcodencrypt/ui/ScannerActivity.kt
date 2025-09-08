@@ -20,10 +20,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,12 +30,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource // Added for stringResource call
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.hereliesaz.barcodencrypt.R // Added
+import com.hereliesaz.barcodencrypt.MainActivity // Added
+// ComposeActivity and SettingsActivity are used in AppScaffoldWithNavRail lambdas
+import com.hereliesaz.barcodencrypt.ui.ComposeActivity
+import com.hereliesaz.barcodencrypt.ui.SettingsActivity
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail // Added
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
 import java.util.concurrent.ExecutorService
@@ -52,7 +57,7 @@ class ScannerActivity : ComponentActivity() {
             if (isGranted) {
                 setupCamera()
             } else {
-                Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_LONG).show() // Changed to string resource
                 finish()
             }
         }
@@ -72,14 +77,37 @@ class ScannerActivity : ComponentActivity() {
     private fun setupCamera() {
         setContent {
             BarcodencryptTheme {
-                ScannerScreen(
-                    onBarcodeFound = { barcodeValue ->
-                        if (isFinishing || isDestroyed) return@ScannerScreen
-                        val resultIntent = Intent().apply {
-                            putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
-                        }
-                        setResult(Activity.RESULT_OK, resultIntent)
+                AppScaffoldWithNavRail(
+                    screenTitle = getString(R.string.scan_key),
+                    onNavigateToManageKeys = {
+                        startActivity(Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
                         finish()
+                    },
+                    onNavigateToCompose = {
+                        startActivity(Intent(this, ComposeActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                        finish()
+                    },
+                    onNavigateToSettings = {
+                        startActivity(Intent(this, SettingsActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                        finish()
+                    },
+                    screenContent = {
+                        ScannerScreen(
+                            onBarcodeFound = { barcodeValue ->
+                                if (isFinishing || isDestroyed) return@ScannerScreen
+                                val resultIntent = Intent().apply {
+                                    putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
+                                }
+                                setResult(Activity.RESULT_OK, resultIntent)
+                                finish()
+                            }
+                        )
                     }
                 )
             }
@@ -134,9 +162,9 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
         Text(
-            text = "Point camera at a barcode",
+            text = stringResource(id = R.string.point_camera_at_a_barcode), // Changed to stringResource
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.onPrimary, // Consider if onPrimary is suitable with NavRail theme
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(32.dp)
