@@ -13,8 +13,8 @@ interface RevokedMessageDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertRevokedMessage(revokedMessage: RevokedMessage)
 
-    @Query("SELECT * FROM revoked_messages WHERE messageSignature = :signature LIMIT 1")
-    suspend fun getRevokedMessage(signature: String): RevokedMessage?
+    @Query("SELECT * FROM revoked_messages WHERE messageHash = :messageHash LIMIT 1")
+    suspend fun getRevokedMessage(messageHash: String): RevokedMessage?
 
     // You might also want a way to clear old revoked messages if the list grows too large
     // @Query("DELETE FROM revoked_messages WHERE timestamp < :expiryTimestamp")
