@@ -57,6 +57,11 @@
             android:name=".ui.PasswordScannerTrampolineActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- ADDED SettingsActivity -->
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:label="Settings"
+            android:theme="@style/Theme.Barcodencrypt" />
 
         <!-- The Watcher, forever vigilant. -->
         <service

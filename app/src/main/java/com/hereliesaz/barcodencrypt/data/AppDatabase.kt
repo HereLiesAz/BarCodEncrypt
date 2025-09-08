@@ -31,7 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "barcodencrypt_database"
                 )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(true) // MODIFIED
                 .build()
                 INSTANCE = instance
                 instance

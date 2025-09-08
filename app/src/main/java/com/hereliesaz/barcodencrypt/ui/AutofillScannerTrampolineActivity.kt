@@ -39,8 +39,8 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
                 if (autofillId != null) {
                     val resultIntent = Intent()
                     val dataset = Dataset.Builder()
-                        // MODIFIED: setValue
-                        .setValue(autofillId, AutofillValue.forText(scannedValue), null)
+                        // MODIFIED: Removed the third 'null' argument
+                        .setValue(autofillId, AutofillValue.forText(scannedValue))
                         .build()
                     resultIntent.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
                     setResult(Activity.RESULT_OK, resultIntent)

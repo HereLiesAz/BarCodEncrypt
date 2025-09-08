@@ -7,6 +7,7 @@ import android.os.Build
 import android.view.autofill.AutofillId
 import android.app.assist.AssistStructure
 import android.service.autofill.AutofillService
+// REMOVED: import android.service.autofill.InlinePresentation
 import android.service.autofill.Dataset
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
@@ -26,6 +27,7 @@ class BarcodeAutofillService : AutofillService() {
         const val EXTRA_AUTOFILL_ID = "com.hereliesaz.barcodencrypt.EXTRA_AUTOFILL_ID"
     }
 
+    @RequiresApi(Build.VERSION_CODES.R) // onFillRequest can be R for some features, but base is O
     override fun onFillRequest(
         request: FillRequest,
         cancellationSignal: android.os.CancellationSignal,
@@ -58,8 +60,9 @@ class BarcodeAutofillService : AutofillService() {
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
-        val dataset = Dataset.Builder()
-            .setValue(autofillId, null, remoteViews) // MODIFIED
+        // MODIFIED: Use Dataset.Builder(presentation) and 2-arg setValue
+        val dataset = Dataset.Builder(remoteViews)
+            .setValue(autofillId, null) 
             .setAuthentication(intentSender)
             .build()
 
