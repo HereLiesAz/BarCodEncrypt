@@ -1,8 +1,8 @@
-# BarCodEncrypt
+# BarCodeNcrypt
 
-I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode on a coupon club key fob.
-"What was that?" I asked.
-"Oh," The Rock showed me his fob. "This is my password."
+I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode on a coupon club key fob.    
+"What was that?" I asked.     
+"Oh," The Rock showed me his fob. "This is my password."    
 
 While holes in a safe make for a way in, holes can be filled. Walls can be made stronger. The consistently most insecure part of security is how you unlock it, and people are bad at making their own keys secure. BarCodEncrypt is an attempt to increase security without demanding more effort from your brain-hole.
 
