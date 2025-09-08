@@ -4,7 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.service.autofill.AutofillService
-import android.service.autofill.Dataset
+// import android.service.autofill.Dataset // No longer creating a Dataset here
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
@@ -25,7 +25,7 @@ class BarcodeAutofillService : AutofillService() {
         const val EXTRA_AUTOFILL_ID = "com.hereliesaz.barcodencrypt.EXTRA_AUTOFILL_ID"
     }
 
-    @RequiresApi(Build.VERSION_CODES.R)
+    @RequiresApi(Build.VERSION_CODES.R) // setAuthentication with 3 args is API 26, but other parts might need R
     override fun onFillRequest(
         request: FillRequest,
         cancellationSignal: android.os.CancellationSignal,
@@ -48,24 +48,22 @@ class BarcodeAutofillService : AutofillService() {
 
         val intent = Intent(this, AutofillScannerTrampolineActivity::class.java).apply {
             putExtra(EXTRA_AUTOFILL_ID, autofillId)
+            // Clear any previous instances of the trampoline activity
+            // and ensure we are creating a new task for this autofill operation.
+            // flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
         val intentSender = PendingIntent.getActivity(
             this,
-            0,
+            autofillId.hashCode(), // Use a request code derived from autofillId for uniqueness
             intent,
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
-        // Dataset is for authentication, no separate presentation needed for the dataset itself here.
-        val dataset = Dataset.Builder()
-            .setAuthentication(intentSender)
-            .build()
-
-        // The remoteViews for the suggestion is set on the FillResponse
+        // Directly build the FillResponse with authentication
         val fillResponse = FillResponse.Builder()
-            .setPresentation(remoteViews) // Correctly set presentation on FillResponse.Builder
-            .addDataset(dataset)
+            .setAuthentication(arrayOf(autofillId), intentSender, remoteViews)
+            // No separate Dataset needed if we are just providing an authentication action
             .build()
 
         callback.onSuccess(fillResponse)

@@ -7,12 +7,12 @@ import android.os.Bundle
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
-// import android.widget.RemoteViews // No longer needed here
+// import android.widget.RemoteViews // Not used in this file
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import android.service.autofill.Dataset
-import android.service.autofill.InlinePresentation // Required for API 28+
+// import android.service.autofill.InlinePresentation // Not used in this file
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
 import com.hereliesaz.barcodencrypt.util.Constants
 
@@ -38,16 +38,9 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
                 if (autofillId != null) {
                     val resultIntent = Intent()
                     val datasetBuilder = Dataset.Builder()
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) { // API 28+
-                        // Use setValue with nullable InlinePresentation
-                        datasetBuilder.setValue(autofillId, AutofillValue.forText(scannedValue), null as InlinePresentation?)
-                    } else { // API 26, 27
-                        // Use deprecated setValue and suppress warning
-                        @Suppress("DEPRECATION")
-                        datasetBuilder.setValue(autofillId, AutofillValue.forText(scannedValue))
-                    }
-                    
+                    // Consistently use deprecated 2-argument setValue and suppress warning
+                    @Suppress("DEPRECATION")
+                    datasetBuilder.setValue(autofillId, AutofillValue.forText(scannedValue))
                     val dataset = datasetBuilder.build()
                     resultIntent.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
                     setResult(Activity.RESULT_OK, resultIntent)
