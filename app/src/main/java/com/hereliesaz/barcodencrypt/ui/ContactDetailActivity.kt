@@ -27,6 +27,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModelProvider
 import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.data.Barcode
+import com.hereliesaz.barcodencrypt.data.KeyType // Ensure KeyType is imported
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
@@ -35,9 +36,12 @@ import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
+// Import existing PasswordDialog if it's in a different package, e.g.
+// import com.hereliesaz.barcodencrypt.ui.composable.PasswordDialog
 
 sealed class KeyCreationState {
     object Idle : KeyCreationState()
+    object ShowKeyTypeSelection : KeyCreationState() // New state
     data class AwaitingPassword(val barcodeValue: String) : KeyCreationState()
     data class AwaitingPasswordInput(val barcodeValue: String) : KeyCreationState()
     data class AwaitingSequenceScan(val sequence: List<String>) : KeyCreationState()
@@ -58,17 +62,21 @@ class ContactDetailActivity : ComponentActivity() {
             if (result.resultCode == Activity.RESULT_OK) {
                 val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
                 if (!barcodeValue.isNullOrBlank()) {
-                    when (keyCreationState) {
+                    when (val currentKeyState = keyCreationState) { // Renamed for clarity
                         is KeyCreationState.AwaitingPasswordScan -> {
-                            viewModel.createAndInsertBarcode(barcodeValue, keyType = com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD)
+                             viewModel.createAndInsertBarcode(barcodeValue, keyType = com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD)
                             keyCreationState = KeyCreationState.Idle
-                            Toast.makeText(this, getString(R.string.key_added), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.key_added) + " (Password Key)", Toast.LENGTH_SHORT).show()
                         }
-                        else -> {
+                        else -> { // Default to standard barcode scan, then ask about password
                             keyCreationState = KeyCreationState.AwaitingPassword(barcodeValue)
                         }
                     }
+                } else {
+                     keyCreationState = KeyCreationState.Idle // Reset if scan cancelled or failed
                 }
+            } else {
+                keyCreationState = KeyCreationState.Idle // Reset if scan cancelled
             }
         }
 
@@ -82,6 +90,11 @@ class ContactDetailActivity : ComponentActivity() {
                         val newSequence = currentState.sequence + barcodeValue
                         keyCreationState = KeyCreationState.AwaitingSequenceScan(newSequence)
                     }
+                }
+            }  else {
+                val currentState = keyCreationState
+                if (currentState is KeyCreationState.AwaitingSequenceScan && currentState.sequence.isEmpty()) {
+                    keyCreationState = KeyCreationState.Idle
                 }
             }
         }
@@ -121,7 +134,7 @@ class ContactDetailActivity : ComponentActivity() {
                     },
                     floatingActionButton = {
                         FloatingActionButton(onClick = {
-                            keyCreationState = KeyCreationState.Idle
+                            keyCreationState = KeyCreationState.ShowKeyTypeSelection
                         }) {
                             Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_barcode_content_description))
                         }
@@ -176,25 +189,34 @@ fun KeyCreationDialog(
     val context = LocalContext.current
     Dialog(onDismissRequest = { onKeyCreationStateChange(KeyCreationState.Idle) }) {
         when (val state = keyCreationState) {
-            is KeyCreationState.Idle -> {
+            is KeyCreationState.ShowKeyTypeSelection -> {
                 KeyTypeSelectionDialog(
                     onDismiss = { onKeyCreationStateChange(KeyCreationState.Idle) },
                     onKeyTypeSelected = { keyType ->
                         when (keyType) {
-                            com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE -> {
+                            KeyType.SINGLE_BARCODE -> {
                                 val intent = Intent(context, ScannerActivity::class.java)
                                 scanResultLauncher.launch(intent)
                             }
-                            com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE -> {
+                            KeyType.BARCODE_SEQUENCE -> {
                                 onKeyCreationStateChange(KeyCreationState.AwaitingSequenceScan(emptyList()))
                             }
-                            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD -> {
+                            KeyType.PASSWORD -> {
                                 onKeyCreationStateChange(KeyCreationState.AwaitingPasswordScan)
+                                val intent = Intent(context, ScannerActivity::class.java)
+                                scanResultLauncher.launch(intent)
                             }
-                            else -> {}
+                            else -> { // Added else branch for exhaustiveness
+                                onKeyCreationStateChange(KeyCreationState.Idle)
+                            }
                         }
                     }
                 )
+            }
+            is KeyCreationState.Idle -> {
+                LaunchedEffect(Unit) {
+                    onKeyCreationStateChange(KeyCreationState.Idle)
+                }
             }
             is KeyCreationState.AwaitingPasswordInput -> {
                 PasswordDialog(
@@ -244,7 +266,12 @@ fun KeyCreationDialog(
                     },
                     dismissButton = {
                         TextButton(onClick = {
-                            onKeyCreationStateChange(KeyCreationState.AwaitingSequencePassword(state.sequence))
+                             if (state.sequence.isNotEmpty()) {
+                                onKeyCreationStateChange(KeyCreationState.AwaitingSequencePassword(state.sequence))
+                            } else {
+                                onKeyCreationStateChange(KeyCreationState.Idle)
+                                Toast.makeText(context, "No barcodes scanned for sequence.", Toast.LENGTH_SHORT).show()
+                            }
                         }) {
                             Text("Finish")
                         }
@@ -285,7 +312,10 @@ fun KeyCreationDialog(
                 )
             }
             is KeyCreationState.AwaitingPasswordScan -> {
-                // This state is handled by the scanResultLauncher
+                LaunchedEffect(Unit) {
+                    // State indicates scanner should be active or was just active.
+                    // If scanner is cancelled, scanResultLauncher handles resetting state to Idle.
+                }
             }
         }
     }
@@ -349,21 +379,21 @@ fun KeyTypeSelectionDialog(
         text = {
             Column {
                 Text(
-                    text = "Single Barcode",
+                    text = "Single Barcode (optionally password protected)",
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onKeyTypeSelected(com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE) }
                         .padding(vertical = 12.dp)
                 )
                 Text(
-                    text = "Barcode Sequence",
+                    text = "Barcode Sequence (optionally password protected)",
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onKeyTypeSelected(com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE) }
                         .padding(vertical = 12.dp)
                 )
                 Text(
-                    text = "Password",
+                    text = "Password Key (barcode IS the encrypted key)",
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onKeyTypeSelected(com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD) }
@@ -403,9 +433,9 @@ fun ContactDetailScreen(
         if (barcodes.isEmpty()) {
             Text(stringResource(id = R.string.no_barcodes_assigned))
         } else {
-            LazyColumn(modifier = Modifier.height(200.dp)) {
+            LazyColumn(modifier = Modifier.defaultMinSize(minHeight = 100.dp).heightIn(max = 300.dp)) {
                 items(barcodes) { barcode ->
-                    BarcodeItem(barcode = barcode)
+                    BarcodeItem(barcode = barcode) // Removed viewModel argument
                 }
             }
         }
@@ -418,7 +448,7 @@ fun ContactDetailScreen(
         if (associations.isEmpty()) {
             Text("No apps associated with this contact.")
         } else {
-            LazyColumn(modifier = Modifier.height(200.dp)) {
+            LazyColumn(modifier = Modifier.defaultMinSize(minHeight = 100.dp).heightIn(max = 200.dp)) {
                 items(associations) { association ->
                     ListItem(
                         headlineContent = { Text(association.packageName) },
@@ -437,12 +467,14 @@ fun ContactDetailScreen(
         Button(onClick = onAddAssociation) {
             Text("Add App Association")
         }
+        // Consider adding a "Delete All Keys" button here if that's the desired UX
+        // Button(onClick = { viewModel.deleteAllBarcodesForContact(contactLookupKey) }) { Text("Delete All Keys") }
     }
 }
 
 @Composable
 fun BarcodeItem(
-    barcode: Barcode
+    barcode: Barcode // Removed viewModel parameter
 ) {
     ListItem(
         headlineContent = { Text(barcode.name) },
@@ -460,5 +492,8 @@ fun BarcodeItem(
                 )
             }
         }
+        // Removed trailingContent for delete button
     )
 }
+
+// Removed the duplicate PasswordDialog definition

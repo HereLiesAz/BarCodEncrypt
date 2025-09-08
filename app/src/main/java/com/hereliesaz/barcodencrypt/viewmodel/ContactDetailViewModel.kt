@@ -40,6 +40,10 @@ class ContactDetailViewModel(application: Application, private val contactLookup
     fun deleteAssociation(associationId: Int) = viewModelScope.launch(Dispatchers.IO) {
         associationRepository.delete(associationId)
     }
+
+    fun deleteBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) { // Added this function
+        barcodeRepository.deleteBarcode(barcode)
+    }
 }
 
 /**
