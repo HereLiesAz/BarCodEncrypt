@@ -128,7 +128,6 @@ class MainActivity : ComponentActivity() {
                         }
 
                         AppScaffoldWithNavRail(
-                            screenTitle = "Barcodencrypt",
                             onNavigateToManageKeys = onManageContactKeysLambda,
                             onNavigateToCompose = {
                                 startActivity(Intent(this, ComposeActivity::class.java).apply {

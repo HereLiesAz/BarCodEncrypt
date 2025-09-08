@@ -47,6 +47,9 @@ fun BarcodencryptTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+            WindowCompat.setDecorFitsSystemWindows(window, false) // Enable edge-to-edge
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

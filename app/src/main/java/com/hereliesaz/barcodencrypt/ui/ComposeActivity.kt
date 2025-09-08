@@ -66,12 +66,6 @@ class ComposeActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
-                    screenTitle = stringResource(id = R.string.compose_message),
-                    navigationIcon = {
-                        IconButton(onClick = { finish() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") // Changed
-                        }
-                    },
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -192,6 +186,11 @@ fun ComposeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+        val activity = (LocalContext.current as? Activity)
+        IconButton(onClick = { activity?.finish() }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
 
         Text(
             text = "Select a recipient, type your message, and then encrypt it.",
