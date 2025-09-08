@@ -86,7 +86,12 @@ class OverlayService : Service() {
             ACTION_DECRYPT_MESSAGE -> {
                 encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
                 correctKey = intent.getStringExtra(Constants.IntentKeys.CORRECT_KEY)
-                val bounds = intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                }
 
                 if (encryptedText == null || correctKey == null || bounds == null) {
                     stopSelf()
@@ -96,7 +101,12 @@ class OverlayService : Service() {
                 createOverlay(bounds)
             }
             ACTION_SHOW_PASSWORD_ICON -> {
-                val bounds = intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                }
                 if (bounds == null) {
                     stopSelf()
                     return START_NOT_STICKY
@@ -162,7 +172,7 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             bounds.left,
             bounds.top,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_SECURE,
             PixelFormat.TRANSLUCENT
         )

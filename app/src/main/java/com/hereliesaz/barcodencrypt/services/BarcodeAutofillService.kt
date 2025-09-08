@@ -58,7 +58,8 @@ class BarcodeAutofillService : AutofillService() {
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
-        val dataset = Dataset.Builder(remoteViews)
+        val dataset = Dataset.Builder()
+            .setValue(autofillId, null, remoteViews) // MODIFIED
             .setAuthentication(intentSender)
             .build()
 

@@ -2,7 +2,7 @@ package com.hereliesaz.barcodencrypt.ui
 
 import android.app.Activity
 import android.content.Intent
-import android.os.Build
+import android.os.Build // Ensure Build is imported
 import android.os.Bundle
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import android.service.autofill.Dataset
+// RemoteViews might be needed if we were to provide a presentation for the setValue, but here it's null.
+// import android.widget.RemoteViews
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
 import com.hereliesaz.barcodencrypt.util.Constants
 
@@ -26,11 +28,19 @@ class AutofillScannerTrampolineActivity : ComponentActivity() {
             }
 
             if (scannedValue != null) {
-                val autofillId = intent.getParcelableExtra<AutofillId>(BarcodeAutofillService.EXTRA_AUTOFILL_ID)
+                // MODIFIED: getParcelableExtra
+                val autofillId: AutofillId? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(BarcodeAutofillService.EXTRA_AUTOFILL_ID, AutofillId::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<AutofillId>(BarcodeAutofillService.EXTRA_AUTOFILL_ID)
+                }
+
                 if (autofillId != null) {
                     val resultIntent = Intent()
                     val dataset = Dataset.Builder()
-                        .setValue(autofillId, AutofillValue.forText(scannedValue))
+                        // MODIFIED: setValue
+                        .setValue(autofillId, AutofillValue.forText(scannedValue), null)
                         .build()
                     resultIntent.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
                     setResult(Activity.RESULT_OK, resultIntent)

@@ -10,9 +10,8 @@ object PasswordPasteManager {
     private var targetNode: AccessibilityNodeInfo? = null
 
     fun prepareForPaste(node: AccessibilityNodeInfo) {
-        // It's crucial to obtain a new reference to the node, as the original
-        // one from the event will be recycled.
-        targetNode = AccessibilityNodeInfo.obtain(node)
+        // MODIFIED: Directly assign the node, remove .obtain()
+        targetNode = node
         Log.d(TAG, "Node prepared for paste: ${node.viewIdResourceName}")
     }
 
@@ -22,15 +21,14 @@ object PasswordPasteManager {
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             val success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
             Log.d(TAG, "Paste action performed. Success: $success")
-            // After performing the action, we must recycle the node.
-            node.recycle()
+            // MODIFIED: Removed node.recycle()
         }
         // Clean up after pasting
         targetNode = null
     }
 
     fun clear() {
-        targetNode?.recycle()
+        // MODIFIED: Removed targetNode?.recycle()
         targetNode = null
         Log.d(TAG, "Paste target cleared.")
     }

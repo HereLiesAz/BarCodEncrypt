@@ -39,7 +39,7 @@ class MessageDetectionService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 val sourceNode = event.source ?: return
                 findEncryptedMessages(sourceNode)
-                sourceNode.recycle()
+                // sourceNode.recycle() // MODIFIED: Removed this line
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
                 val sourceNode = event.source ?: return
@@ -51,7 +51,7 @@ class MessageDetectionService : AccessibilityService() {
                 } else {
                     PasswordPasteManager.clear()
                 }
-                sourceNode.recycle()
+                // sourceNode.recycle() // MODIFIED: Removed this line
             }
         }
     }
