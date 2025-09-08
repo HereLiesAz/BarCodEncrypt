@@ -39,7 +39,7 @@ class MessageDetectionService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 val sourceNode = event.source ?: return
                 findEncryptedMessages(sourceNode)
-                // sourceNode.recycle() // MODIFIED: Removed this line
+                sourceNode.recycle()
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
                 val sourceNode = event.source ?: return
@@ -51,7 +51,7 @@ class MessageDetectionService : AccessibilityService() {
                 } else {
                     PasswordPasteManager.clear()
                 }
-                // sourceNode.recycle() // MODIFIED: Removed this line
+                sourceNode.recycle()
             }
         }
     }
@@ -74,7 +74,7 @@ class MessageDetectionService : AccessibilityService() {
             if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
                 seenMessages[fullMatch] = now
                 serviceScope.launch {
-                    val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it) } ?: return@launch
+                    val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it.toString()) } ?: return@launch
                     val contactWithBarcodes = contactRepository.getContactWithBarcodesByLookupKeySync(contactLookupKey) ?: return@launch
 
                     val options = if (fullMatch.startsWith("BCE::")) fullMatch.split("::").getOrNull(2) ?: "" else ""
