@@ -41,6 +41,7 @@ import com.hereliesaz.barcodencrypt.ui.PasswordScannerTrampolineActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
+import com.hereliesaz.barcodencrypt.util.DecryptionAttemptManager
 import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import com.hereliesaz.barcodencrypt.util.ScannerManager
@@ -56,6 +57,7 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var revokedMessageRepository: RevokedMessageRepository
+    private lateinit var decryptionAttemptManager: DecryptionAttemptManager
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
@@ -70,6 +72,7 @@ class OverlayService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
+        decryptionAttemptManager = DecryptionAttemptManager(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -163,29 +166,37 @@ class OverlayService : Service() {
 
     private fun decryptMessage(fullEncryptedText: String, barcode: Barcode, password: String? = null) {
         serviceScope.launch(Dispatchers.IO) {
+            val headerInfo = EncryptionManager.parseHeader(fullEncryptedText)
+            val maxAttempts = headerInfo?.maxAttempts ?: 0
+
+            val remainingAttempts = decryptionAttemptManager.getRemainingAttempts(fullEncryptedText, maxAttempts)
+            if (remainingAttempts <= 0 && maxAttempts > 0) {
+                withContext(Dispatchers.Main) {
+                    overlayState.value = OverlayState.Failure
+                }
+                return@launch
+            }
+
             val ikm = EncryptionManager.getIkm(barcode, password)
             val decrypted = EncryptionManager.decrypt(fullEncryptedText, ikm)
 
             withContext(Dispatchers.Main) {
                 if (decrypted != null) {
-                    val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
-                    val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
-                    val ttlHours = ttlHoursString?.removePrefix("ttl_hours=")?.toDoubleOrNull()
-                    val ttlOnOpen = options.contains("ttl_on_open=true")
-
-                    var ttlInSeconds: Long? = null
-                    if (ttlHours != null && ttlOnOpen) {
-                        ttlInSeconds = (ttlHours * 3600).toLong()
+                    decryptionAttemptManager.resetAttempts(fullEncryptedText) // Clear attempts on success
+                    val ttlInSeconds = if (decrypted.ttlOnOpen && decrypted.ttlHours != null) {
+                        (decrypted.ttlHours * 3600).toLong()
+                    } else {
+                        null
                     }
+                    overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
 
-                    overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
-
-                    if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
+                    if (decrypted.singleUse) {
                         val messageHash = EncryptionManager.sha256(fullEncryptedText)
                         revokedMessageRepository.revokeMessage(messageHash)
                         Log.i(TAG, "Single-use message has been revoked.")
                     }
                 } else {
+                    decryptionAttemptManager.recordFailedAttempt(fullEncryptedText, maxAttempts)
                     overlayState.value = OverlayState.Failure
                 }
             }
