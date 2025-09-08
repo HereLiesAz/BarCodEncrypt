@@ -17,8 +17,8 @@ android {
         applicationId = "com.hereliesaz.barcodencrypt"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.6.8"
+        versionCode = 5
+        versionName = "0.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

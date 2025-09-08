@@ -4,7 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.service.autofill.AutofillService
-// import android.service.autofill.Dataset // No longer creating a Dataset here
+// import android.service.autofill.Dataset // No longer creating a Dataset for this specific path
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
@@ -25,7 +25,7 @@ class BarcodeAutofillService : AutofillService() {
         const val EXTRA_AUTOFILL_ID = "com.hereliesaz.barcodencrypt.EXTRA_AUTOFILL_ID"
     }
 
-    @RequiresApi(Build.VERSION_CODES.R) // setAuthentication with 3 args is API 26, but other parts might need R
+    @RequiresApi(Build.VERSION_CODES.R)
     override fun onFillRequest(
         request: FillRequest,
         cancellationSignal: android.os.CancellationSignal,
@@ -48,22 +48,20 @@ class BarcodeAutofillService : AutofillService() {
 
         val intent = Intent(this, AutofillScannerTrampolineActivity::class.java).apply {
             putExtra(EXTRA_AUTOFILL_ID, autofillId)
-            // Clear any previous instances of the trampoline activity
-            // and ensure we are creating a new task for this autofill operation.
-            // flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
         val intentSender = PendingIntent.getActivity(
             this,
-            autofillId.hashCode(), // Use a request code derived from autofillId for uniqueness
+            autofillId.hashCode(), 
             intent,
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
-        // Directly build the FillResponse with authentication
+        // Reverting to use FillResponse.Builder.setAuthentication directly.
+        // This will generate a deprecation warning, which is known.
+        @Suppress("DEPRECATION")
         val fillResponse = FillResponse.Builder()
             .setAuthentication(arrayOf(autofillId), intentSender, remoteViews)
-            // No separate Dataset needed if we are just providing an authentication action
             .build()
 
         callback.onSuccess(fillResponse)

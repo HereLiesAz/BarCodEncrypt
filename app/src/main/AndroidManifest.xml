@@ -63,6 +63,12 @@
             android:label="Settings"
             android:theme="@style/Theme.Barcodencrypt" />
 
+        <!-- Onboarding Activity -->
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Barcodencrypt" />
+
         <!-- The Watcher, forever vigilant. -->
         <service
             android:name=".services.MessageDetectionService"

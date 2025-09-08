@@ -62,9 +62,9 @@ class AuthManager(
     suspend fun getGoogleSignInRequest(): GetCredentialRequest {
         val nonce = generateNonce()
         val googleIdOption: GetGoogleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(true)
+            .setFilterByAuthorizedAccounts(false) // Changed to false
             .setServerClientId(webClientId)
-            .setAutoSelectEnabled(true)
+            // .setAutoSelectEnabled(true) // Commented out
             .setNonce(nonce)
             .build()
         return GetCredentialRequest.Builder()
@@ -95,7 +95,7 @@ class AuthManager(
         return bytes.toHexString()
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
+    @OptIn(ExperimentalStdlibApi::class, kotlin.ExperimentalUnsignedTypes::class)
     private fun ByteArray.toHexString() = asUByteArray().joinToString("") { it.toString(16).padStart(2, '0') }
 
 
