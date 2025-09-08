@@ -10,6 +10,7 @@ import android.provider.ContactsContract
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
@@ -23,40 +24,23 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.services.MessageDetectionService
-import com.hereliesaz.barcodencrypt.ui.ComposeActivity
-import com.hereliesaz.barcodencrypt.ui.ContactDetailActivity
-import com.hereliesaz.barcodencrypt.ui.ScannerActivity
-import com.hereliesaz.barcodencrypt.ui.SettingsActivity // Added
-import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail // Added
+import com.hereliesaz.barcodencrypt.ui.*
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.ScannerManager
 import com.hereliesaz.barcodencrypt.viewmodel.MainViewModel
+import com.hereliesaz.barcodencrypt.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.launch
 
-/**
- * The main entry point of the application.
- *
- * This Activity serves several key roles:
- * 1.  **Permissions Hub:** It displays the status of all critical permissions (Accessibility,
- *     Overlay, Contacts) and provides buttons for the user to grant them.
- * 2.  **Navigation:** It provides the main navigation buttons to access the "Compose Message"
- *     and "Manage Contact Keys" flows.
- * 3.  **Scanner Listener:** It collects the [ScannerManager.requests] flow. When a scan is
- *     requested from another component (like the [OverlayService]), this Activity launches
- *     the [ScannerActivity] and returns the result back to the [ScannerManager].
- */
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    private val viewModel: MainViewModel by viewModels {
+        MainViewModelFactory(applicationContext)
+    }
 
-    /**
-     * Handles the result from [ScannerActivity].
-     * When a barcode is successfully scanned, the result is passed to the [ScannerManager],
-     * which then forwards it to the original requester.
-     */
     private val scanLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val scannedValue = if (result.resultCode == RESULT_OK) {
@@ -67,16 +51,11 @@ class MainActivity : ComponentActivity() {
             ScannerManager.onScanResult(scannedValue)
         }
 
-    /** Handles the result of the runtime permission request for notifications. */
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             viewModel.notificationPermissionStatus.value = isGranted
         }
 
-    /**
-     * Handles the result of the runtime permission request for reading contacts.
-     * If permission is granted, it immediately launches the contact picker.
-     */
     private val contactsPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             viewModel.contactsPermissionStatus.value = isGranted
@@ -87,11 +66,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    /**
-     * Handles the result from the contact picker.
-     * When a contact is successfully chosen, this extracts the contact's URI and launches
-     * the [ContactDetailActivity] for them.
-     */
     private val contactPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
@@ -104,9 +78,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Launch a coroutine to listen for scan requests from the ScannerManager.
-        // This allows any component in the app to request a scan, and this Activity,
-        // as the main UI entry point, will handle launching the scanner.
+        viewModel.checkLoginStatus()
+
+        viewModel.isLoggedIn.observe(this) { isLoggedIn ->
+            if (isLoggedIn == false) {
+                startActivity(Intent(this, OnboardingActivity::class.java))
+                finish()
+                return@observe
+            }
+        }
+
         lifecycleScope.launch {
             ScannerManager.requests.collect {
                 scanLauncher.launch(Intent(this@MainActivity, ScannerActivity::class.java))
@@ -115,45 +96,66 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BarcodencryptTheme {
-                val context = LocalContext.current
-                val onManageContactKeysLambda = {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        this, Manifest.permission.READ_CONTACTS
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (hasPermission) {
-                        contactPickerLauncher.launch(
-                            Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+                val isLoggedIn by viewModel.isLoggedIn.observeAsState()
+                if (isLoggedIn == true) {
+                    var showPasswordDialog by remember { mutableStateOf(true) }
+                    val passwordCorrect by viewModel.passwordCorrect.observeAsState()
+
+                    if (showPasswordDialog && passwordCorrect != true) {
+                        BackHandler(enabled = true) {
+                            // Do nothing
+                        }
+                        PasswordDialog(
+                            onDismiss = { /* Do nothing */ },
+                            onConfirm = { password ->
+                                viewModel.checkPassword(password)
+                            })
+                    }
+
+                    if (passwordCorrect == true) {
+                        val context = LocalContext.current
+                        val onManageContactKeysLambda = {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                this, Manifest.permission.READ_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                contactPickerLauncher.launch(
+                                    Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+                                )
+                            } else {
+                                contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        }
+
+                        AppScaffoldWithNavRail(
+                            screenTitle = "Barcodencrypt",
+                            onNavigateToManageKeys = onManageContactKeysLambda,
+                            onNavigateToCompose = {
+                                startActivity(Intent(this, ComposeActivity::class.java).apply {
+                                    flags =
+                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                })
+                            },
+                            onNavigateToSettings = {
+                                startActivity(Intent(this, SettingsActivity::class.java).apply {
+                                    flags =
+                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                })
+                            },
+                            screenContent = {
+                                MainScreen(
+                                    viewModel = viewModel,
+                                    onRequestNotificationPermission = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                    },
+                                    onManageContactKeys = onManageContactKeysLambda
+                                )
+                            }
                         )
-                    } else {
-                        contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                     }
                 }
-
-                AppScaffoldWithNavRail(
-                    screenTitle = "Barcodencrypt",
-                    onNavigateToManageKeys = onManageContactKeysLambda,
-                    onNavigateToCompose = {
-                        startActivity(Intent(this, ComposeActivity::class.java).apply {
-                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        })
-                    },
-                    onNavigateToSettings = {
-                         startActivity(Intent(this, SettingsActivity::class.java).apply {
-                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                         })
-                    },
-                    screenContent = {
-                        MainScreen(
-                            viewModel = viewModel,
-                            onRequestNotificationPermission = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                }
-                            },
-                            onManageContactKeys = onManageContactKeysLambda
-                        )
-                    }
-                )
             }
         }
     }
@@ -191,8 +193,10 @@ class MainActivity : ComponentActivity() {
         )
         contentResolver.query(contactUri, projection, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
-                val lookupKey = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.LOOKUP_KEY))
-                val displayName = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
+                val lookupKey =
+                    cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.LOOKUP_KEY))
+                val displayName =
+                    cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
 
                 val intent = Intent(this, ContactDetailActivity::class.java).apply {
                     putExtra(Constants.IntentKeys.CONTACT_LOOKUP_KEY, lookupKey)
@@ -212,8 +216,12 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val serviceEnabled by viewModel.serviceStatus.observeAsState(initial = false)
-    val notificationPermissionGranted by viewModel.notificationPermissionStatus.observeAsState(initial = true)
-    val contactsPermissionGranted by viewModel.contactsPermissionStatus.observeAsState(initial = false)
+    val notificationPermissionGranted by viewModel.notificationPermissionStatus.observeAsState(
+        initial = true
+    )
+    val contactsPermissionGranted by viewModel.contactsPermissionStatus.observeAsState(
+        initial = false
+    )
     val overlayPermissionGranted by viewModel.overlayPermissionStatus.observeAsState(initial = false)
     var showDialog by remember { mutableStateOf(!serviceEnabled) }
 
@@ -239,7 +247,9 @@ fun MainScreen(
     }
 
     Column(
-        modifier = Modifier.padding(16.dp).fillMaxSize(),
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -262,11 +272,17 @@ fun MainScreen(
         }
         Spacer(Modifier.height(16.dp))
 
-        ContactsPermissionCard(isGranted = contactsPermissionGranted, onRequest = onManageContactKeys)
+        ContactsPermissionCard(
+            isGranted = contactsPermissionGranted,
+            onRequest = onManageContactKeys
+        )
 
         Spacer(Modifier.height(32.dp))
 
-        Text("Create a new encrypted message from scratch.", style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Create a new encrypted message from scratch.",
+            style = MaterialTheme.typography.bodySmall
+        )
         Button(onClick = {
             val intent = Intent(context, ComposeActivity::class.java)
             context.startActivity(intent)
@@ -288,11 +304,16 @@ fun MainScreen(
 fun ServiceStatusCard(serviceEnabled: Boolean) {
     val context = LocalContext.current
     Card(
-        modifier = Modifier.fillMaxWidth().padding(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
         colors = CardDefaults.cardColors(containerColor = if (serviceEnabled) EnabledGreen else DisabledRed)
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = if (serviceEnabled) "Watcher Service: Enabled" else "Watcher Service: Disabled", modifier = Modifier.weight(1f))
+            Text(
+                text = if (serviceEnabled) "Watcher Service: Enabled" else "Watcher Service: Disabled",
+                modifier = Modifier.weight(1f)
+            )
             if (!serviceEnabled) {
                 TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
                     Text("Enable Service")
@@ -307,7 +328,9 @@ fun OverlayPermissionCard(isGranted: Boolean, onRequest: () -> Unit) {
     if (isGranted) return
 
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary)
     ) {
         PermissionRequestRow(
@@ -322,7 +345,9 @@ fun OverlayPermissionCard(isGranted: Boolean, onRequest: () -> Unit) {
 fun ContactsPermissionCard(isGranted: Boolean, onRequest: () -> Unit) {
     if (isGranted) return
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary)
     ) {
         PermissionRequestRow(
