@@ -334,7 +334,7 @@ fun KeySelectionDialog(
             Column {
                 barcodes.forEach { barcode ->
                     Text(
-                        text = barcode.identifier,
+                        text = barcode.name,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onKeySelected(barcode) }
@@ -343,7 +343,7 @@ fun KeySelectionDialog(
                 }
                 if (barcodes.isEmpty()) {
                     Text(stringResource(id = R.string.no_barcodes_for_contact))
-                } 
+                }
             }
         },
         confirmButton = {

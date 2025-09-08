@@ -39,6 +39,7 @@ object EncryptionManager {
      * The format of the v2 message header, which includes a counter for the rolling key.
      */
     private const val HEADER_FORMAT_V2 = "BCE::v2::%s::%s::%d::"
+    private const val HEADER_PREFIX_V3 = "~BCE~"
 
     private const val HMAC_ALGORITHM = "HmacSHA256"
     private const val SALT_SIZE = 16 // 128 bits
@@ -122,14 +123,24 @@ object EncryptionManager {
     fun encrypt(
         plaintext: String,
         ikm: String,
-        salt: ByteArray,
-        barcodeIdentifier: String,
+        keyName: String,
         counter: Long,
         options: List<String> = emptyList()
     ): String? {
+        return encryptV3(plaintext, ikm, keyName, counter, options)
+    }
+
+    private fun encryptV3(
+        plaintext: String,
+        ikm: String,
+        keyName: String,
+        counter: Long,
+        options: List<String>
+    ): String? {
         return try {
+            val salt = createSalt()
             val prk = hkdfExtract(salt, ikm)
-            val info = "BCEv2|msg|$counter"
+            val info = "BCEv2|msg|$counter" // V2 HKDF info is compatible with V3
             val messageKey = hkdfExpand(prk, info, 32)
             val secretKey = SecretKeySpec(messageKey, ALGORITHM)
 
@@ -140,31 +151,25 @@ object EncryptionManager {
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
             val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
 
-            val saltAndIvAndCiphertext = salt + iv + encryptedBytes
-            val base64Payload = Base64.encodeToString(saltAndIvAndCiphertext, Base64.DEFAULT)
-            val header = HEADER_FORMAT_V2.format(options.joinToString(","), barcodeIdentifier, counter)
-            header + base64Payload
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
+            // V3 Header construction
+            val version: Byte = 3
+            var flags: Byte = 0
+            if (options.contains(OPTION_SINGLE_USE)) flags = (flags.toInt() or 0x01).toByte()
+            if (options.any { it.startsWith("ttl_hours") }) flags = (flags.toInt() or 0x02).toByte()
+            if (options.contains("ttl_on_open=true")) flags = (flags.toInt() or 0x04).toByte()
 
-    private fun encryptV1(plaintext: String, key: String, barcodeIdentifier: String, options: List<String> = emptyList()): String? {
-        return try {
-            val secretKey = deriveKeyV1(key)
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            // GCM is most secure with a random IV for every encryption.
-            val iv = ByteArray(GCM_IV_LENGTH)
-            SecureRandom().nextBytes(iv)
-            val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec)
-            val encryptedBytes = cipher.doFinal(plaintext.toByteArray(StandardCharsets.UTF_8))
-            // Prepend the IV to the ciphertext. It's needed for decryption and is not a secret.
-            val ivAndCiphertext = iv + encryptedBytes
-            val base64Payload = Base64.encodeToString(ivAndCiphertext, Base64.DEFAULT)
-            val header = HEADER_FORMAT_V1.format(options.joinToString(","), barcodeIdentifier)
-            header + base64Payload
+            val keyNameBytes = keyName.toByteArray(StandardCharsets.UTF_8)
+            val counterBytes = counter.toString().toByteArray(StandardCharsets.UTF_8)
+
+            val header = byteArrayOf(version, flags) +
+                    keyNameBytes.size.toByte() + keyNameBytes +
+                    counterBytes.size.toByte() + counterBytes +
+                    salt + iv
+
+            val payload = header + encryptedBytes
+            val base64Payload = Base64.encodeToString(payload, Base64.NO_WRAP)
+
+            HEADER_PREFIX_V3 + base64Payload
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -172,13 +177,59 @@ object EncryptionManager {
     }
 
     fun decrypt(ciphertext: String, ikm: String): String? {
-        val parts = ciphertext.split("::")
-        if (parts.size < 5 || parts[0] != "BCE") return null
+        return when {
+            ciphertext.startsWith(HEADER_PREFIX_V3) -> decryptV3(ciphertext, ikm)
+            ciphertext.startsWith("BCE::") -> {
+                val parts = ciphertext.split("::")
+                when (parts.getOrNull(1)) {
+                    "v1" -> decryptV1(ciphertext, ikm)
+                    "v2" -> decryptV2(ciphertext, ikm, parts)
+                    else -> null
+                }
+            }
+            else -> null
+        }
+    }
 
-        return when (val version = parts.getOrNull(1)) {
-            "v1" -> decryptV1(ciphertext, ikm)
-            "v2" -> decryptV2(ciphertext, ikm, parts)
-            else -> null // Unknown version
+    private fun decryptV3(ciphertext: String, ikm: String): String? {
+        try {
+            val base64Payload = ciphertext.removePrefix(HEADER_PREFIX_V3)
+            val payload = Base64.decode(base64Payload, Base64.NO_WRAP)
+
+            var offset = 0
+            val version = payload[offset++]
+            if (version != 3.toByte()) return null
+
+            val flags = payload[offset++]
+            val keyNameSize = payload[offset++]
+            val keyName = String(payload, offset, keyNameSize.toInt(), StandardCharsets.UTF_8)
+            offset += keyNameSize
+
+            val counterSize = payload[offset++]
+            val counter = String(payload, offset, counterSize.toInt(), StandardCharsets.UTF_8).toLong()
+            offset += counterSize
+
+            val salt = payload.copyOfRange(offset, offset + SALT_SIZE)
+            offset += SALT_SIZE
+            val iv = payload.copyOfRange(offset, offset + GCM_IV_LENGTH)
+            offset += GCM_IV_LENGTH
+
+            val encryptedBytes = payload.copyOfRange(offset, payload.size)
+
+            val prk = hkdfExtract(salt, ikm)
+            val info = "BCEv2|msg|$counter"
+            val messageKey = hkdfExpand(prk, info, 32)
+            val secretKey = SecretKeySpec(messageKey, ALGORITHM)
+
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val parameterSpec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec)
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            return String(decryptedBytes, StandardCharsets.UTF_8)
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
         }
     }
 
