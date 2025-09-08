@@ -1,37 +1,44 @@
 # BarCodEncrypt
 
-I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode on a coupon club key fob.    
-"What was that?" I asked.    
-"Oh," The Rock showed me his fob. "This is my password."    
-  
-While holes in a safe make for a way in, holes can be filled. Walls can be made stronger. The consistently most insecure part of security is how you unlock it, and people are bad at making their own keys secure. BarCodEncrypt is an attempt to increase security without demanding more effort from your brain-hole. 
+I had this dream where, in the middle of our conversation, Dwayne "The Rock" Johnson pulled out his keys and scanned the barcode on a coupon club key fob.
+"What was that?" I asked.
+"Oh," The Rock showed me his fob. "This is my password."
 
-## Core Principles
+While holes in a safe make for a way in, holes can be filled. Walls can be made stronger. The consistently most insecure part of security is how you unlock it, and people are bad at making their own keys secure. BarCodEncrypt is an attempt to increase security without demanding more effort from your brain-hole.
 
-1.  **Physical Keys:** Digital keys are ephemeral, easily guessed. A physical barcode, while not Fort Knox, introduces a tangible barrier to entry.
-2.  **Ephemeral Messages:** The sender dictates the lifespan of a message. It can be a fleeting whisper, visible only once (`single-use`), or a more persistent statement with a time-to-live (`ttl`).
-3.  **Passive Detection:** The app, once granted the necessary permissions, watches passively. It doesn't live inside a specific messaging app; it lives on top of the screen, looking for its own encrypted spoor and for password fields that it can help with.
+## Concept & Core Features
 
-## How It Works
+BarCodEncrypt is an Android application that uses physical barcodes and QR codes as keys for encryption and password management. The core idea is to introduce a tangible, physical barrier to digital security operations. The application is built with Jetpack Compose and Material 3 and operates on three main principles:
 
-### Encryption
-1.  **Manage Keys:** From the main screen, select "Manage Contact Keys". This allows you to pick a contact from your phone's address book.
-2.  **Assign Barcode:** In the contact detail screen, tap the '+' button to open the scanner. Scan a barcode to assign it to that contact. You must give the barcode a unique identifier (e.g., "John's Work QR Code").
-3.  **Compose:** From the main screen, select "Compose Message". Select your recipient and the specific key you want to use for them.
-4.  **Encrypt & Share:** Write your message, choose your options (single-use or timed), and tap "Encrypt". The encrypted text can then be copied to the clipboard and pasted into any other application.
+1.  **Physical Keys for Digital Security:** Instead of easily guessed or stolen digital passwords, the app uses physical barcodes as the root secret for cryptographic operations.
+2.  **Ephemeral & Secure Messaging:** A user can link a barcode to a contact, encrypt a message, and share it through any platform. The app's background service detects this message on the recipient's screen and prompts them to scan the corresponding physical barcode to decrypt it. Messages can be configured to be single-use or to expire after a set time.
+3.  **Passive Password Assistance:** The same background service can detect when a user selects a password field in any application. It provides a simple overlay to scan any barcode, instantly pasting its raw content into the field, acting as a simple, physically-keyed password manager.
 
-### Decryption
+## How It Works Step-by-Step
+
+### Encryption & Sharing
+1.  **Manage Keys:** From the main screen, select "Manage Contact Keys" to choose a contact from your phone's address book.
+2.  **Assign Barcode:** In the contact detail screen, tap the '+' button to open the scanner. Scan a barcode and give it a unique name to assign it to that contact.
+3.  **Compose:** From the main screen, select "Compose Message". Select your recipient and the specific key you want to use.
+4.  **Encrypt & Share:** Write your message, choose your options (e.g., single-use), and tap "Encrypt". The encrypted text can then be copied and pasted into any other application.
+
+### Decryption & Viewing
 1.  **Enable Service:** From the main screen, enable the "Watcher Service" and grant the necessary Accessibility and Overlay permissions.
-2.  **Detect:** When an encrypted message appears on screen (e.g., in a text message or email), the Watcher service will detect it and place a semi-transparent yellow overlay on it.
-3.  **Scan:** Tap the overlay. The barcode scanner will open.
-4.  **Reveal:** Scan the correct barcode that was used to encrypt the message. The overlay will turn green and reveal the plaintext. If the key is incorrect, it will turn red. The message will disappear according to the options it was encrypted with.
+2.  **Detect:** When an encrypted message appears on screen, the Watcher service will detect it and place a semi-transparent yellow overlay on it.
+3.  **Scan & Reveal:** Tap the overlay to open the barcode scanner. Scan the correct barcode that was used to encrypt the message. The overlay will turn green and reveal the plaintext.
 
-### Password Assistant
-The Watcher Service has a second sense. It can detect when you tap on a password field in any app.
-1.  **Detect:** When a password field is focused, a small barcode icon will appear next to it.
-2.  **Scan:** Tap the icon to open the barcode scanner.
-3.  **Paste:** Scan any barcode. The raw content of the barcode will be automatically and instantly pasted into the password field. This allows you to use physical barcodes as passwords, without needing to replace your primary password manager.
+## Technical Deep Dive
 
-## Current Status
+### Architecture
+To achieve its passive, on-screen functionality, BarCodEncrypt integrates deeply with the Android OS. This is accomplished primarily through two background services:
+* **`MessageDetectionService`**: An `AccessibilityService` that monitors the screen's content in real-time. It is responsible for detecting specially formatted encrypted text strings and identifying when the user has focused on a password input field.
+* **`OverlayService`**: This service has `SYSTEM_ALERT_WINDOW` permission, allowing it to draw on top of other applications. When the `MessageDetectionService` finds a target, the `OverlayService` is responsible for rendering the decryption interface or the password assistant icon.
 
-The application is feature-complete and demonstrates the core concept effectively. The UI is built with Jetpack Compose and Material 3. The encryption uses AES/GCM. While the core loop is complete, future work could include more advanced key exchange mechanisms, UI polish, and more robust error handling.
+This architecture requires significant user permissions (`CAMERA`, `READ_CONTACTS`, `SYSTEM_ALERT_WINDOW`) to function.
+
+### Cryptographic Model & Status
+The application's security model has evolved to provide stronger guarantees. The core concept is **feature-complete** based on the v2 cryptographic design.
+
+* **v1 (Legacy):** The initial proof-of-concept used standard AES-GCM for encryption.
+* **v2 (Current & Implemented):** To provide **forward secrecy**, the current design uses an HMAC-based Key Derivation Function (HKDF, RFC 5869). Instead of using a barcode's raw value directly, a unique encryption key is derived for every single message by combining the barcode's secret value (the IKM) with a per-message salt and an incrementing counter. This ensures that the compromise of a single message key does not reveal the master key or any other message keys.
+* **v3 (Planned but Blocked):** A future design aims to implement a **Double Ratchet** algorithm (similar to Signal) for **post-compromise security**. However, this is currently **blocked** as it requires `X25519` elliptic curve cryptography, which is not included in the standard Android JCA. The project's current development constraints prevent adding the necessary third-party cryptographic libraries (like BouncyCastle or Tink) needed for a secure implementation.
