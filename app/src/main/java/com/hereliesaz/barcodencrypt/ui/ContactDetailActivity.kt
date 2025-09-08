@@ -19,14 +19,21 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
+import com.hereliesaz.barcodencrypt.MainActivity
+// Corrected imports:
+import com.hereliesaz.barcodencrypt.ui.ComposeActivity 
+import com.hereliesaz.barcodencrypt.ui.SettingsActivity
 
 class ContactDetailActivity : ComponentActivity() {
 
@@ -59,13 +66,38 @@ class ContactDetailActivity : ComponentActivity() {
 
         setContent {
             BarcodencryptTheme {
-                ContactDetailScreen(
-                    viewModel = viewModel,
-                    contactName = contactName!!,
-                    onNavigateUp = { finish() },
-                    onLaunchScanner = {
-                        val intent = Intent(this, ScannerActivity::class.java)
-                        scanResultLauncher.launch(intent)
+                AppScaffoldWithNavRail(
+                    screenTitle = contactName!!, // contactName is guaranteed non-null here
+                    navigationIcon = {
+                        IconButton(onClick = { finish() }) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back_content_description))
+                        }
+                    },
+                    onNavigateToManageKeys = {
+                        startActivity(Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
+                    onNavigateToCompose = {
+                        startActivity(Intent(this, ComposeActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
+                    onNavigateToSettings = {
+                        startActivity(Intent(this, SettingsActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
+                    floatingActionButton = {
+                        FloatingActionButton(onClick = {
+                            val intent = Intent(this, ScannerActivity::class.java)
+                            scanResultLauncher.launch(intent)
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_barcode_content_description))
+                        }
+                    },
+                    screenContent = {
+                        ContactDetailScreen(viewModel = viewModel)
                     }
                 )
             }
@@ -73,17 +105,13 @@ class ContactDetailActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactDetailScreen(
-    viewModel: ContactDetailViewModel,
-    contactName: String,
-    onNavigateUp: () -> Unit,
-    onLaunchScanner: () -> Unit
+    viewModel: ContactDetailViewModel
 ) {
     val barcodes by viewModel.barcodes.observeAsState(emptyList())
-
     val pendingScan by viewModel.pendingScan.observeAsState(initial = Triple("", "", false))
+
     if (pendingScan.third) {
         AddBarcodeIdentifierDialog(
             onDismiss = { viewModel.pendingScan.value = Triple("", "", false) },
@@ -99,29 +127,13 @@ fun ContactDetailScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(contactName) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateUp) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onLaunchScanner) {
-                Icon(Icons.Default.Add, contentDescription = "Add Barcode")
-            }
-        }
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) { // Apply padding here
         if (barcodes.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text( "No barcodes assigned. Tap the + to add one.", modifier = Modifier.padding(16.dp))
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(id = R.string.no_barcodes_assigned), modifier = Modifier.padding(16.dp))
             }
         } else {
-            LazyColumn(modifier = Modifier.padding(padding).padding(8.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) { // Fill size within the padded Box
                 items(barcodes) { barcode ->
                     BarcodeItem(
                         barcode = barcode,
@@ -147,7 +159,7 @@ fun BarcodeItem(
         headlineContent = { Text(barcode.identifier) },
         supportingContent = {
             Text(
-                "Counter: ${barcode.counter}\nValue: ${barcode.value}",
+                "Counter: ${barcode.counter}\nValue: ${barcode.value}", // This could be made translatable too if needed
                 maxLines = 2,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -155,10 +167,10 @@ fun BarcodeItem(
         trailingContent = {
             Row {
                 IconButton(onClick = { showResetDialog = true }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset Counter")
+                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.reset_counter_content_description))
                 }
                 IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Barcode")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_barcode_content_description))
                 }
             }
         }
@@ -167,16 +179,16 @@ fun BarcodeItem(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Barcode?") },
-            text = { Text("Are you sure you want to delete the barcode '${barcode.identifier}'?") },
+            title = { Text(stringResource(R.string.delete_barcode_question)) },
+            text = { Text(stringResource(R.string.confirm_delete_barcode_message, barcode.identifier)) },
             confirmButton = {
                 Button(
                     onClick = { onDelete(barcode); showDeleteDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+                ) { Text(stringResource(R.string.delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -184,15 +196,15 @@ fun BarcodeItem(
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset Counter?") },
-            text = { Text("Resetting the counter may expose old messages to replay attacks. Are you sure you want to proceed?") },
+            title = { Text(stringResource(R.string.reset_counter_question)) },
+            text = { Text(stringResource(R.string.confirm_reset_counter_message)) },
             confirmButton = {
                 Button(
                     onClick = { onReset(barcode); showResetDialog = false }
-                ) { Text("Reset") }
+                ) { Text(stringResource(R.string.reset_button_text)) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showResetDialog = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -203,23 +215,23 @@ fun AddBarcodeIdentifierDialog(onDismiss: () -> Unit, onConfirm: (String) -> Uni
     var text by remember { mutableStateOf(TextFieldValue("")) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Barcode Identifier") },
+        title = { Text(stringResource(R.string.add_barcode_identifier)) },
         text = {
             Column {
-                Text("Enter a unique identifier for this barcode.")
+                Text(stringResource(R.string.enter_a_unique_identifier_for_this_barcode))
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    label = { Text("Identifier") }
+                    label = { Text(stringResource(R.string.identifier)) }
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(text.text); onDismiss() }) { Text("OK") }
+            Button(onClick = { onConfirm(text.text); onDismiss() }) { Text(stringResource(R.string.ok_button_text)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

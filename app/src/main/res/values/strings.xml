@@ -61,5 +61,29 @@
     <string name="duration_seconds">Duration (s)</string>
     <string name="settings">Settings</string>
     <string name="about">About</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="contact_has_no_keys_add_one">This contact has no keys. Go to \'Manage Contact Keys\' to add one.</string>
+    <string name="encryption_failed">Encryption failed.</string>
+    <string name="contacts_permission_to_select_recipient">Contacts permission is required to select a recipient.</string>
+
+    <string name="delete_barcode_question">Delete Barcode?</string>
+    <string name="confirm_delete_barcode_message">Are you sure you want to delete the barcode \'%1$s\'?</string>
+    <string name="reset_counter_question">Reset Counter?</string>
+    <string name="confirm_reset_counter_message">Resetting the counter may expose old messages to replay attacks. Are you sure you want to proceed?</string>
+    <string name="reset_button_text">Reset</string>
+    <string name="ok_button_text">OK</string>
+
+    <string name="back_content_description">Back</string>
+    <string name="add_barcode_content_description">Add Barcode</string>
+    <string name="reset_counter_content_description">Reset Counter</string>
+    <string name="delete_barcode_content_description">Delete Barcode</string>
+
+    <string name="watcher_service_enabled_text">Watcher Service: Enabled</string>
+    <string name="watcher_service_disabled_text">Watcher Service: Disabled</string>
+    <string name="enable_service_button_text">Enable Service</string>
+    <string name="grant_button_text">Grant</string>
+
+    <string name="autofill_service_enabled_text">Autofill Service Enabled</string>
+    <string name="enable_autofill_service_button_text">Enable Autofill Service</string>
 </resources>
 

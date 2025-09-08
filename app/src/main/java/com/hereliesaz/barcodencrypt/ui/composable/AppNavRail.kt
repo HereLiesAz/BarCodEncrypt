@@ -6,12 +6,14 @@ import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.aznavrail.AzNavRail
 
 @Composable
-fun Home(
+fun AppNavRail(
     onManageContactKeys: () -> Unit,
-    onComposeMessage: () -> Unit
+    onComposeMessage: () -> Unit,
+    onSettings: () -> Unit // Added settings callback
 ) {
     val manageKeysText = stringResource(id = R.string.manage_contact_keys)
     val composeText = stringResource(id = R.string.compose_message)
+    val settingsText = stringResource(id = R.string.settings) // Added settings text resource
 
     AzNavRail {
         azRailItem(
@@ -23,6 +25,11 @@ fun Home(
             id = "compose",
             text = composeText,
             onClick = onComposeMessage
+        )
+        azRailItem(
+            id = "settings", // Added settings item
+            text = settingsText,
+            onClick = onSettings
         )
     }
 }

@@ -24,10 +24,14 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.hereliesaz.barcodencrypt.MainActivity
+import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.data.Barcode
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.viewmodel.ComposeViewModel
 import kotlinx.coroutines.launch
@@ -44,7 +48,7 @@ class ComposeActivity : ComponentActivity() {
                     Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
                 )
             } else {
-                Toast.makeText(this, "Contacts permission is required to select a recipient.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.contacts_permission_to_select_recipient), Toast.LENGTH_LONG).show()
             }
         }
 
@@ -61,11 +65,31 @@ class ComposeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             BarcodencryptTheme {
-                ComposeScreen(
-                    viewModel = viewModel,
-                    selectedContactInfo = selectedContactInfo,
-                    onSelectRecipient = ::selectRecipient,
-                    onNavigateUp = { finish() }
+                AppScaffoldWithNavRail(
+                    screenTitle = stringResource(id = R.string.compose_message),
+                    navigationIcon = {
+                        IconButton(onClick = { finish() }) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    onNavigateToManageKeys = {
+                        startActivity(Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
+                    onNavigateToCompose = { /* Already here */ },
+                    onNavigateToSettings = {
+                        startActivity(Intent(this, SettingsActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
+                    screenContent = {
+                        ComposeScreen(
+                            viewModel = viewModel,
+                            selectedContactInfo = selectedContactInfo,
+                            onSelectRecipient = ::selectRecipient
+                        )
+                    }
                 )
             }
         }
@@ -106,8 +130,7 @@ class ComposeActivity : ComponentActivity() {
 fun ComposeScreen(
     viewModel: ComposeViewModel,
     selectedContactInfo: Pair<String, String>?,
-    onSelectRecipient: () -> Unit,
-    onNavigateUp: () -> Unit
+    onSelectRecipient: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -125,119 +148,120 @@ fun ComposeScreen(
         selectedBarcode = barcodes.firstOrNull()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Compose Message") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateUp) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
+    val noRecipientSelectedText = stringResource(id = R.string.no_recipient_selected)
+    val noKeySelectedText = stringResource(id = R.string.no_key_selected)
+    val recipientLabelText = stringResource(id = R.string.recipient)
+    val keyLabelText = stringResource(id = R.string.key)
+    val selectRecipientAndKeyButtonText = stringResource(id = R.string.select_recipient_and_key)
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+        OutlinedButton(onClick = onSelectRecipient, modifier = Modifier.fillMaxWidth()) {
+            Text(selectRecipientAndKeyButtonText)
+        }
+        Spacer(Modifier.height(16.dp))
+
+        RecipientInfoRow(
+            label = recipientLabelText,
+            value = selectedContactInfo?.first ?: noRecipientSelectedText
+        )
+        Spacer(Modifier.height(8.dp))
+        RecipientInfoRow(
+            label = keyLabelText,
+            value = selectedBarcode?.identifier ?: noKeySelectedText,
+            onClick = {
+                if (barcodes.isNotEmpty()) {
+                    showKeySelectionDialog = true
+                } else if (selectedContactInfo != null) {
+                    Toast.makeText(context, context.getString(R.string.contact_has_no_keys_add_one), Toast.LENGTH_LONG).show()
+                } else {
+                     Toast.makeText(context, context.getString(R.string.no_recipient_selected), Toast.LENGTH_SHORT).show()
                 }
+            }
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = message,
+            onValueChange = { message = it },
+            label = { Text(stringResource(id = R.string.message)) },
+            modifier = Modifier.fillMaxWidth().weight(1f)
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable { isSingleUse = !isSingleUse }
+        ) {
+            Checkbox(checked = isSingleUse, onCheckedChange = { isSingleUse = it })
+            Text(stringResource(id = R.string.single_use_message), style = MaterialTheme.typography.bodySmall)
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
+            Text(stringResource(id = R.string.timed_message), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = ttlSeconds,
+                onValueChange = { ttlSeconds = it.filter { char -> char.isDigit() } },
+                label = { Text(stringResource(id = R.string.duration_seconds)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = isTimed,
+                modifier = Modifier.width(120.dp)
             )
         }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).padding(16.dp)) {
 
-            OutlinedButton(onClick = onSelectRecipient, modifier = Modifier.fillMaxWidth()) {
-                Text("Select Recipient & Key")
-            }
-            Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
-            RecipientInfoRow(
-                label = "Recipient",
-                value = selectedContactInfo?.first ?: "No Recipient Selected"
-            )
-            Spacer(Modifier.height(8.dp))
-            RecipientInfoRow(
-                label = "Key",
-                value = selectedBarcode?.identifier ?: "No Key Selected",
-                onClick = {
-                    if (barcodes.isNotEmpty()) {
-                        showKeySelectionDialog = true
-                    } else if (selectedContactInfo != null) {
-                        Toast.makeText(context, "This contact has no keys. Go to 'Manage Contact Keys' to add one.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            )
+        Button(
+            onClick = {
+                val barcode = selectedBarcode
+                if (message.isNotBlank() && barcode != null) {
+                    coroutineScope.launch {
+                        val options = mutableListOf<String>()
+                        if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                        if (isTimed) options.add("${com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
 
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = message,
-                onValueChange = { message = it },
-                label = { Text("Message") },
-                modifier = Modifier.fillMaxWidth().weight(1f)
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { isSingleUse = !isSingleUse }
-            ) {
-                Checkbox(checked = isSingleUse, onCheckedChange = { isSingleUse = it })
-                Text("Single-Use Message", style = MaterialTheme.typography.bodySmall)
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
-                Text("Timed Message", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                OutlinedTextField(
-                    value = ttlSeconds,
-                    onValueChange = { ttlSeconds = it.filter { char -> char.isDigit() } },
-                    label = { Text("Duration (s)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = isTimed,
-                    modifier = Modifier.width(120.dp)
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    val barcode = selectedBarcode
-                    if (message.isNotBlank() && barcode != null) {
-                        coroutineScope.launch {
-                            val options = mutableListOf<String>()
-                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
-                            if (isTimed) options.add("${com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_TTL_PREFIX}${ttlSeconds.toLongOrNull() ?: 60}")
-
-                            val result = viewModel.encryptMessage(
-                                plaintext = message,
-                                barcode = barcode,
-                                options = options
-                            )
-                            if (result != null) {
-                                encryptedText = result
-                            } else {
-                                Toast.makeText(context, "Encryption failed.", Toast.LENGTH_SHORT).show()
-                            }
+                        val result = viewModel.encryptMessage(
+                            plaintext = message,
+                            barcode = barcode,
+                            options = options
+                        )
+                        if (result != null) {
+                            encryptedText = result
+                        } else {
+                            Toast.makeText(context, context.getString(R.string.encryption_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = message.isNotBlank() && selectedBarcode != null
-            ) {
-                Text("Encrypt")
-            }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = message.isNotBlank() && selectedBarcode != null
+        ) {
+            Text(stringResource(id = R.string.encrypt))
+        }
 
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = encryptedText, onValueChange = {}, readOnly = true, label = { Text("Encrypted Message") }, modifier = Modifier.fillMaxWidth().height(120.dp))
-            Button(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("encrypted_message", encryptedText)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Message copied to clipboard", Toast.LENGTH_SHORT).show()
-                },
-                enabled = encryptedText.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Copy")
-            }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = encryptedText, 
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(id = R.string.encrypted_message_will_appear_here)) },
+            modifier = Modifier.fillMaxWidth().height(120.dp)
+        )
+        Button(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("encrypted_message", encryptedText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, context.getString(R.string.message_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            },
+            enabled = encryptedText.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(id = R.string.copy))
         }
     }
 
@@ -281,7 +305,7 @@ fun KeySelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Key") },
+        title = { Text(stringResource(id = R.string.select_key)) },
         text = {
             Column {
                 barcodes.forEach { barcode ->
@@ -293,10 +317,13 @@ fun KeySelectionDialog(
                             .padding(vertical = 12.dp)
                     )
                 }
+                if (barcodes.isEmpty()) {
+                    Text(stringResource(id = R.string.no_barcodes_for_contact))
+                } 
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.cancel)) }
         }
     )
 }
