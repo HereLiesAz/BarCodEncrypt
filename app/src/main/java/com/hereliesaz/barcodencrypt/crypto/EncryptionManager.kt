@@ -134,6 +134,7 @@ object EncryptionManager {
                 if (password == null) throw IllegalArgumentException("Password is required for password-protected key")
                 sha256((barcode.barcodeSequence?.joinToString("") ?: "") + password)
             }
+            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD -> barcode.value
         }
     }
 

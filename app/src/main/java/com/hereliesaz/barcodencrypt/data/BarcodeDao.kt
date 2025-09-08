@@ -34,7 +34,6 @@ interface BarcodeDao {
     @Query("SELECT * FROM barcodes WHERE contactLookupKey = :contactLookupKey ORDER BY name ASC")
     fun getBarcodesForContactRaw(contactLookupKey: String): LiveData<List<Barcode>>
 
-
     @Delete
     suspend fun deleteBarcode(barcode: Barcode)
 

@@ -24,8 +24,8 @@ class ContactDetailViewModel(application: Application, private val contactLookup
         associations = associationRepository.getAssociationsForContact(contactLookupKey)
     }
 
-    fun createAndInsertBarcode(rawValue: String, password: String? = null) = viewModelScope.launch(Dispatchers.IO) {
-        barcodeRepository.createAndInsertBarcode(contactLookupKey, rawValue, password)
+    fun createAndInsertBarcode(rawValue: String, password: String? = null, keyType: KeyType = KeyType.SINGLE_BARCODE) = viewModelScope.launch(Dispatchers.IO) {
+        barcodeRepository.createAndInsertBarcode(contactLookupKey, rawValue, password, keyType)
     }
 
     fun createAndInsertBarcodeSequence(sequence: List<String>, password: String? = null) = viewModelScope.launch(Dispatchers.IO) {

@@ -30,17 +30,17 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
      * @param rawValue The raw string value from the scanned barcode.
      * @param password An optional password to protect the key.
      */
-    suspend fun createAndInsertBarcode(contactLookupKey: String, rawValue: String, password: String? = null) {
+    suspend fun createAndInsertBarcode(contactLookupKey: String, rawValue: String, password: String? = null, keyType: KeyType = KeyType.SINGLE_BARCODE) {
         val name = "Key ending in...${EncryptionManager.sha256(rawValue).takeLast(6)}"
         val (iv, encryptedValue) = KeyManager.encrypt(rawValue)
-        val keyType = if (password.isNullOrEmpty()) KeyType.SINGLE_BARCODE else KeyType.PASSWORD_PROTECTED_BARCODE
+        val finalKeyType = if (keyType == KeyType.PASSWORD) KeyType.PASSWORD else if (password.isNullOrEmpty()) KeyType.SINGLE_BARCODE else KeyType.PASSWORD_PROTECTED_BARCODE
         val passwordHash = if (password.isNullOrEmpty()) null else EncryptionManager.sha256(password)
         val barcode = Barcode(
             contactLookupKey = contactLookupKey,
             name = name,
             encryptedValue = encryptedValue,
             iv = iv,
-            keyType = keyType,
+            keyType = finalKeyType,
             passwordHash = passwordHash
         )
         barcodeDao.insertBarcode(barcode)

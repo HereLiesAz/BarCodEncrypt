@@ -12,6 +12,7 @@ import androidx.lifecycle.Observer
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.*
 import com.hereliesaz.barcodencrypt.util.Constants
+import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
@@ -86,7 +87,7 @@ class MessageDetectionService : AccessibilityService() {
                         return@launch
                     }
 
-                    val barcodeName = getBarcodeNameFromMessage(fullMatch)
+                    val barcodeName = MessageParser.getBarcodeNameFromMessage(fullMatch)
                     if (barcodeName != null) {
                         val barcode = contactWithBarcodes.barcodes.find { it.name == barcodeName }
                         if (barcode != null) {
@@ -113,24 +114,6 @@ class MessageDetectionService : AccessibilityService() {
 
         for (i in 0 until nodeInfo.childCount) {
             findEncryptedMessages(nodeInfo.getChild(i))
-        }
-    }
-
-    private fun getBarcodeNameFromMessage(message: String): String? {
-        val parts = message.split("::")
-        return when {
-            message.startsWith("BCE::v2") && parts.size >= 4 -> parts[3]
-            message.startsWith("~BCE~") -> {
-                try {
-                    val payload = android.util.Base64.decode(message.removePrefix("~BCE~"), android.util.Base64.NO_WRAP)
-                    var offset = 2 // skip version and flags
-                    val keyNameSize = payload[offset++]
-                    String(payload, offset, keyNameSize.toInt(), Charsets.UTF_8)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-            else -> null
         }
     }
 
