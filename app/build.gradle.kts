@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation("com.github.HereLiesAz:AzNavRail:2.7")
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
