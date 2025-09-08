@@ -85,5 +85,6 @@
 
     <string name="autofill_service_enabled_text">Autofill Service Enabled</string>
     <string name="enable_autofill_service_button_text">Enable Autofill Service</string>
+    <string name="key_added">Key added.</string>
 </resources>
 
