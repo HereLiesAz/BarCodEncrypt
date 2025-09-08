@@ -1,6 +1,8 @@
 package com.hereliesaz.barcodencrypt.data
 
 import androidx.lifecycle.LiveData
+import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
+import com.hereliesaz.barcodencrypt.crypto.KeyManager
 
 /**
  * A repository to mediate between the data sources (the Scribe's archive) and the rest of the app.
@@ -21,22 +23,35 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
     }
 
     /**
-     * Inserts a new barcode into the database via a coroutine.
+     * Creates and inserts a new barcode into the database.
+     * This method handles the encryption of the barcode value.
      *
-     * @param barcode The [Barcode] to insert.
+     * @param contactLookupKey The lookup key of the contact.
+     * @param rawValue The raw string value from the scanned barcode.
      */
-    suspend fun insertBarcode(barcode: Barcode) {
+    suspend fun createAndInsertBarcode(contactLookupKey: String, rawValue: String) {
+        val name = "Key ending in...${EncryptionManager.sha256(rawValue).takeLast(6)}"
+        val (iv, encryptedValue) = KeyManager.encrypt(rawValue)
+        val barcode = Barcode(
+            contactLookupKey = contactLookupKey,
+            name = name,
+            encryptedValue = encryptedValue,
+            iv = iv
+        )
         barcodeDao.insertBarcode(barcode)
     }
 
+
     /**
-     * Seeks a specific barcode by its identifier from the Scribe's records.
+     * Seeks a specific barcode by its name from the Scribe's records.
      *
-     * @param identifier The name of the barcode.
+     * @param name The name of the barcode.
      * @return The [Barcode] if it exists, otherwise null.
      */
-    suspend fun getBarcodeByIdentifier(identifier: String): Barcode? {
-        return barcodeDao.getBarcodeByIdentifier(identifier)
+    suspend fun getBarcodeByName(name: String): Barcode? {
+        val barcode = barcodeDao.getBarcodeByName(name)
+        barcode?.decryptValue()
+        return barcode
     }
 
     /**
@@ -61,6 +76,8 @@ class BarcodeRepository(private val barcodeDao: BarcodeDao) {
      * @return The [Barcode] object or null if not found.
      */
     suspend fun getBarcode(barcodeId: Int): Barcode? {
-        return barcodeDao.getBarcode(barcodeId)
+        val barcode = barcodeDao.getBarcode(barcodeId)
+        barcode?.decryptValue()
+        return barcode
     }
 }

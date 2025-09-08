@@ -3,6 +3,7 @@ package com.hereliesaz.barcodencrypt.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,15 +13,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.hereliesaz.barcodencrypt.R
@@ -31,8 +29,7 @@ import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.MainActivity
-// Corrected imports:
-import com.hereliesaz.barcodencrypt.ui.ComposeActivity 
+import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity
 
 class ContactDetailActivity : ComponentActivity() {
@@ -45,8 +42,9 @@ class ContactDetailActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
                 val barcodeValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
-                if (contactLookupKey != null && !barcodeValue.isNullOrBlank()) {
-                    viewModel.pendingScan.value = Triple(contactLookupKey!!, barcodeValue, true)
+                if (!barcodeValue.isNullOrBlank()) {
+                    viewModel.createAndInsertBarcode(barcodeValue)
+                    Toast.makeText(this, getString(R.string.key_added), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -67,7 +65,7 @@ class ContactDetailActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
-                    screenTitle = contactName!!, // contactName is guaranteed non-null here
+                    screenTitle = contactName!!,
                     navigationIcon = {
                         IconButton(onClick = { finish() }) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(id = R.string.back_content_description))
@@ -97,141 +95,152 @@ class ContactDetailActivity : ComponentActivity() {
                         }
                     },
                     screenContent = {
-                        ContactDetailScreen(viewModel = viewModel)
+                        var showDialog by remember { mutableStateOf(false) }
+
+                        if (showDialog) {
+                            AddAssociationDialog(
+                                onDismiss = { showDialog = false },
+                                onConfirm = { packageName ->
+                                    viewModel.addAssociation(packageName)
+                                    showDialog = false
+                                },
+                                installedApps = getInstalledApps()
+                            )
+                        }
+
+                        ContactDetailScreen(
+                            viewModel = viewModel,
+                            onAddAssociation = { showDialog = true }
+                        )
                     }
                 )
             }
         }
     }
+
+    private fun getInstalledApps(): List<String> {
+        val pm = packageManager
+        val packages = pm.getInstalledApplications(0)
+        return packages.map { it.packageName }.sorted()
+    }
+}
+
+@Composable
+fun AddAssociationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    installedApps: List<String>
+) {
+    var selectedApp by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Associate App") },
+        text = {
+            LazyColumn {
+                items(installedApps) { app ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedApp = app }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedApp == app,
+                            onClick = { selectedApp = app }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(app)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedApp) },
+                enabled = selectedApp.isNotEmpty()
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
 fun ContactDetailScreen(
-    viewModel: ContactDetailViewModel
+    viewModel: ContactDetailViewModel,
+    onAddAssociation: () -> Unit
 ) {
     val barcodes by viewModel.barcodes.observeAsState(emptyList())
-    val pendingScan by viewModel.pendingScan.observeAsState(initial = Triple("", "", false))
+    val associations by viewModel.associations.observeAsState(emptyList())
 
-    if (pendingScan.third) {
-        AddBarcodeIdentifierDialog(
-            onDismiss = { viewModel.pendingScan.value = Triple("", "", false) },
-            onConfirm = { identifier ->
-                val newBarcode = Barcode(
-                    contactLookupKey = pendingScan.first,
-                    identifier = identifier,
-                    value = pendingScan.second
-                )
-                viewModel.insertBarcode(newBarcode)
-                viewModel.pendingScan.value = Triple("", "", false)
-            }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text(
+            text = "Add keys for this contact by scanning barcodes. Then, associate messaging apps with this contact so Barcodencrypt knows which keys to use for which app.",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = 16.dp)
         )
-    }
-
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) { // Apply padding here
+        Text("Keys", style = MaterialTheme.typography.headlineMedium)
+        Text("These are the keys you can use to send encrypted messages to this contact.", style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(8.dp))
         if (barcodes.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(id = R.string.no_barcodes_assigned), modifier = Modifier.padding(16.dp))
-            }
+            Text(stringResource(id = R.string.no_barcodes_assigned))
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) { // Fill size within the padded Box
+            LazyColumn(modifier = Modifier.height(200.dp)) {
                 items(barcodes) { barcode ->
-                    BarcodeItem(
-                        barcode = barcode,
-                        onDelete = { viewModel.deleteBarcode(it) },
-                        onReset = { viewModel.resetCounter(it) }
+                    BarcodeItem(barcode = barcode)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Associated Apps", style = MaterialTheme.typography.headlineMedium)
+        Text("When you are in one of these apps, Barcodencrypt will use this contact's keys to decrypt messages.", style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(8.dp))
+        if (associations.isEmpty()) {
+            Text("No apps associated with this contact.")
+        } else {
+            LazyColumn(modifier = Modifier.height(200.dp)) {
+                items(associations) { association ->
+                    ListItem(
+                        headlineContent = { Text(association.packageName) },
+                        trailingContent = {
+                            IconButton(onClick = { viewModel.deleteAssociation(association.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Association")
+                            }
+                        }
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onAddAssociation) {
+            Text("Add App Association")
         }
     }
 }
 
 @Composable
 fun BarcodeItem(
-    barcode: Barcode,
-    onDelete: (Barcode) -> Unit,
-    onReset: (Barcode) -> Unit
+    barcode: Barcode
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showResetDialog by remember { mutableStateOf(false) }
-
     ListItem(
-        headlineContent = { Text(barcode.identifier) },
+        headlineContent = { Text(barcode.name) },
         supportingContent = {
             Text(
-                "Counter: ${barcode.counter}\nValue: ${barcode.value}", // This could be made translatable too if needed
-                maxLines = 2,
+                "Counter: ${barcode.counter}",
+                maxLines = 1,
                 style = MaterialTheme.typography.bodySmall
             )
-        },
-        trailingContent = {
-            Row {
-                IconButton(onClick = { showResetDialog = true }) {
-                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.reset_counter_content_description))
-                }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_barcode_content_description))
-                }
-            }
-        }
-    )
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text(stringResource(R.string.delete_barcode_question)) },
-            text = { Text(stringResource(R.string.confirm_delete_barcode_message, barcode.identifier)) },
-            confirmButton = {
-                Button(
-                    onClick = { onDelete(barcode); showDeleteDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.delete)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.cancel)) }
-            }
-        )
-    }
-
-    if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            title = { Text(stringResource(R.string.reset_counter_question)) },
-            text = { Text(stringResource(R.string.confirm_reset_counter_message)) },
-            confirmButton = {
-                Button(
-                    onClick = { onReset(barcode); showResetDialog = false }
-                ) { Text(stringResource(R.string.reset_button_text)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) { Text(stringResource(R.string.cancel)) }
-            }
-        )
-    }
-}
-
-@Composable
-fun AddBarcodeIdentifierDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf(TextFieldValue("")) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_barcode_identifier)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.enter_a_unique_identifier_for_this_barcode))
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text(stringResource(R.string.identifier)) }
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(text.text); onDismiss() }) { Text(stringResource(R.string.ok_button_text)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }

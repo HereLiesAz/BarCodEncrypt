@@ -29,8 +29,6 @@ object EncryptionManager {
 
     /** A message option indicating the message should be viewable only once. */
     const val OPTION_SINGLE_USE = "single-use"
-    /** A message option prefix indicating the message has a time-to-live in seconds. e.g., "ttl=60". */
-    const val OPTION_TTL_PREFIX = "ttl="
 
     /**
      * The format of the v1 message header.

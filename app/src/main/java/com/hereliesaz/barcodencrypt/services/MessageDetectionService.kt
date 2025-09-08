@@ -8,56 +8,32 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.lifecycle.Observer
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
-import com.hereliesaz.barcodencrypt.data.AppDatabase
-import com.hereliesaz.barcodencrypt.data.BarcodeRepository
-import com.hereliesaz.barcodencrypt.data.RevokedMessageRepository
+import com.hereliesaz.barcodencrypt.data.*
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * The Watcher. An omnipresent, silent observer.
- *
- * This [AccessibilityService] is the core of the app's passive detection system. Its purpose is twofold:
- * 1.  It listens for [AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED] to find and highlight
- *     Barcodencrypt messages on the screen.
- * 2.  It listens for [AccessibilityEvent.TYPE_VIEW_FOCUSED] to detect when a user is interacting
- *     with a password field, so it can offer assistance.
- *
- * When a valid message or a password field is found, it summons the [OverlayService] to handle the UI.
- */
 class MessageDetectionService : AccessibilityService() {
 
-    private lateinit var barcodeRepository: BarcodeRepository
+    private lateinit var associationRepository: AppContactAssociationRepository
+    private lateinit var contactRepository: ContactRepository
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private lateinit var serviceScope: CoroutineScope
-
-    /**
-     * A local, in-memory cache to prevent re-processing the same message in rapid succession.
-     * This is necessary because a single user action can sometimes trigger multiple window change events.
-     * The key is the full encrypted message string, the value is the timestamp it was last seen.
-     */
     private val seenMessages = ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
         val database = AppDatabase.getDatabase(application)
-        barcodeRepository = BarcodeRepository(database.barcodeDao())
+        associationRepository = AppContactAssociationRepository(database.appContactAssociationDao())
+        contactRepository = ContactRepository(database.contactDao())
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         Log.d(TAG, "Watcher service has been created.")
     }
 
-    /**
-     * The entry point for all accessibility events. It filters for window content changes
-     * and view focused events.
-     */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
@@ -80,35 +56,25 @@ class MessageDetectionService : AccessibilityService() {
         }
     }
 
-    /**
-     * Recursively traverses the view hierarchy starting from [nodeInfo], searching for text
-     * that contains the Barcodencrypt message header.
-     *
-     * For each node, it checks the text content. If a potential message is found, it's checked
-     * against the `seenMessages` cooldown and the `revokedMessageRepository` (for single-use messages).
-     * If the message is valid, it launches a coroutine to fetch the corresponding barcode from the
-     * database and summons the [OverlayService].
-     *
-     * @param nodeInfo The node to start the search from.
-     */
     private fun findEncryptedMessages(nodeInfo: AccessibilityNodeInfo?) {
         if (nodeInfo == null) return
 
         val text = nodeInfo.text?.toString()
         if (!text.isNullOrBlank() && text.contains("BCE::")) {
-            val regex = "BCE::v1::.*?::.*?::[A-Za-z0-9+/=\\s]+".toRegex()
+            val regex = "BCE::v[12]::.*?::.*?::(?:\\d+::)?[A-Za-z0-9+/=\\s]+".toRegex()
             regex.findAll(text).forEach { matchResult ->
                 val fullMatch = matchResult.value
                 val now = System.currentTimeMillis()
-                val lastSeen = seenMessages[fullMatch]
-                if (lastSeen == null || now - lastSeen > COOLDOWN_MS) {
+
+                if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
                     seenMessages[fullMatch] = now
                     val parts = fullMatch.split("::")
                     if (parts.size >= 5) {
                         val options = parts[2]
-                        val identifier = parts[3]
                         serviceScope.launch {
-                            // For single-use messages, check if they've already been used.
+                            val contactLookupKey = nodeInfo.packageName?.let { associationRepository.getContactLookupKeyForPackage(it) } ?: return@launch
+                            val contactWithBarcodes = contactRepository.getContactWithBarcodesByLookupKeySync(contactLookupKey) ?: return@launch
+
                             val messageHash = EncryptionManager.sha256(fullMatch)
                             if (options.contains(EncryptionManager.OPTION_SINGLE_USE) &&
                                 revokedMessageRepository.isMessageRevoked(messageHash)
@@ -117,13 +83,17 @@ class MessageDetectionService : AccessibilityService() {
                                 return@launch
                             }
 
-                            // Find the key associated with the message's identifier.
-                            val barcode = barcodeRepository.getBarcodeByIdentifier(identifier)
-                            if (barcode != null) {
-                                val bounds = Rect()
-                                nodeInfo.getBoundsInScreen(bounds)
-                                Log.i(TAG, "MATCH CONFIRMED: Identifier '$identifier' at $bounds.")
-                                summonDecryptionOverlay(fullMatch, barcode.value, bounds)
+                            for (barcode in contactWithBarcodes.barcodes) {
+                                barcode.decryptValue()
+                                val decryptedText = EncryptionManager.decrypt(fullMatch, barcode.value)
+                                if (decryptedText != null) {
+                                    val bounds = Rect()
+                                    nodeInfo.getBoundsInScreen(bounds)
+                                    withContext(Dispatchers.Main) {
+                                        summonDecryptionOverlay(decryptedText, bounds)
+                                    }
+                                    return@launch
+                                }
                             }
                         }
                     }
@@ -131,20 +101,12 @@ class MessageDetectionService : AccessibilityService() {
             }
         }
 
-        // Recurse through all children of the current node.
         for (i in 0 until nodeInfo.childCount) {
             findEncryptedMessages(nodeInfo.getChild(i))
         }
     }
 
-    /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen for message decryption.
-     *
-     * @param encryptedText The full encrypted payload.
-     * @param correctKey The true key required for decryption.
-     * @param bounds The screen coordinates where the message was found.
-     */
-    private fun summonDecryptionOverlay(encryptedText: String, correctKey: String, bounds: Rect) {
+    private fun summonDecryptionOverlay(decryptedText: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
             return
@@ -152,18 +114,12 @@ class MessageDetectionService : AccessibilityService() {
 
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_DECRYPT_MESSAGE
-            putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
-            putExtra(Constants.IntentKeys.CORRECT_KEY, correctKey)
+            putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, decryptedText)
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
         }
         startService(intent)
     }
 
-    /**
-     * Summons the Poltergeist (the OverlayService) to manifest on screen for password filling.
-     *
-     * @param bounds The screen coordinates where the password field was found.
-     */
     private fun summonPasswordOverlay(bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")

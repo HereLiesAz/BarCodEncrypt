@@ -2,56 +2,39 @@ package com.hereliesaz.barcodencrypt.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.hereliesaz.barcodencrypt.data.AppDatabase
-import com.hereliesaz.barcodencrypt.data.Barcode
-import com.hereliesaz.barcodencrypt.data.BarcodeRepository
+import com.hereliesaz.barcodencrypt.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class ContactDetailViewModel(application: Application, contactLookupKey: String) : ViewModel() {
+class ContactDetailViewModel(application: Application, private val contactLookupKey: String) : ViewModel() {
 
-    private val repository: BarcodeRepository
+    private val barcodeRepository: BarcodeRepository
+    private val associationRepository: AppContactAssociationRepository
     val barcodes: LiveData<List<Barcode>>
-
-    /**
-     * A LiveData to manage the dialog flow for adding a barcode identifier after a scan.
-     * Triple holds: contactLookupKey, barcodeValue, shouldShowDialog
-     */
-    val pendingScan = MutableLiveData<Triple<String, String, Boolean>>()
+    val associations: LiveData<List<AppContactAssociation>>
 
     init {
-        val barcodeDao = AppDatabase.getDatabase(application).barcodeDao()
-        repository = BarcodeRepository(barcodeDao)
-        barcodes = repository.getBarcodesForContact(contactLookupKey)
+        val database = AppDatabase.getDatabase(application)
+        barcodeRepository = BarcodeRepository(database.barcodeDao())
+        associationRepository = AppContactAssociationRepository(database.appContactAssociationDao())
+        barcodes = barcodeRepository.getBarcodesForContact(contactLookupKey)
+        associations = associationRepository.getAssociationsForContact(contactLookupKey)
     }
 
-    /**
-     * Deletes a specific barcode from the repository.
-     * @param barcode The barcode to delete.
-     */
-    fun deleteBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
-        repository.deleteBarcode(barcode)
+    fun createAndInsertBarcode(rawValue: String) = viewModelScope.launch(Dispatchers.IO) {
+        barcodeRepository.createAndInsertBarcode(contactLookupKey, rawValue)
     }
 
-    /**
-     * Inserts a new barcode into the repository.
-     * @param barcode The barcode to add.
-     */
-    fun insertBarcode(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
-        repository.insertBarcode(barcode)
+    fun addAssociation(packageName: String) = viewModelScope.launch(Dispatchers.IO) {
+        val association = AppContactAssociation(packageName = packageName, contactLookupKey = contactLookupKey)
+        associationRepository.insert(association)
     }
 
-    /**
-     * Resets the counter for a specific barcode back to 0.
-     * @param barcode The barcode whose counter should be reset.
-     */
-    fun resetCounter(barcode: Barcode) = viewModelScope.launch(Dispatchers.IO) {
-        val updatedBarcode = barcode.copy(counter = 0L)
-        repository.updateBarcode(updatedBarcode)
+    fun deleteAssociation(associationId: Int) = viewModelScope.launch(Dispatchers.IO) {
+        associationRepository.delete(associationId)
     }
 }
 

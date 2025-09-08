@@ -6,7 +6,7 @@ import androidx.lifecycle.LiveData
  * A repository to mediate between the data sources (the Scribe's archive) and the rest of the app.
  * It abstracts the origin of the data, providing a clean API for the ViewModel to consume.
  *
- * @param contactDao The Data Access Object for contacts and barcodes.
+ * @param contactDao The Data Access Object for contacts.
  */
 class ContactRepository(private val contactDao: ContactDao) {
 
@@ -24,6 +24,10 @@ class ContactRepository(private val contactDao: ContactDao) {
         return contactDao.getContactWithBarcodesByLookupKey(contactLookupKey)
     }
 
+    suspend fun getContactWithBarcodesByLookupKeySync(contactLookupKey: String): ContactWithBarcodes? {
+        return contactDao.getContactWithBarcodesByLookupKeySync(contactLookupKey)
+    }
+
     /**
      * Inserts a new contact into the database via a coroutine.
      *
@@ -34,37 +38,10 @@ class ContactRepository(private val contactDao: ContactDao) {
     }
 
     /**
-     * Inserts a new barcode into the database via a coroutine.
-     *
-     * @param barcode The [Barcode] to insert.
-     */
-    suspend fun insertBarcode(barcode: Barcode) {
-        contactDao.insertBarcode(barcode)
-    }
-
-    /**
-     * Seeks a specific barcode by its identifier from the Scribe's records.
-     *
-     * @param identifier The name of the barcode.
-     * @return The [Barcode] if it exists, otherwise null.
-     */
-    suspend fun getBarcodeByIdentifier(identifier: String): Barcode? {
-        return contactDao.getBarcodeByIdentifier(identifier)
-    }
-
-    /**
      * Deletes a contact from the database.
      * @param contact The contact to be deleted.
      */
     suspend fun deleteContact(contact: Contact) {
         contactDao.deleteContact(contact)
-    }
-
-    /**
-     * Deletes a barcode from the database.
-     * @param barcode The barcode to be deleted.
-     */
-    suspend fun deleteBarcode(barcode: Barcode) {
-        contactDao.deleteBarcode(barcode)
     }
 }

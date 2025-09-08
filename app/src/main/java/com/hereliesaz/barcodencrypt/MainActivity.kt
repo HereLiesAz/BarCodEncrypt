@@ -215,12 +215,38 @@ fun MainScreen(
     val notificationPermissionGranted by viewModel.notificationPermissionStatus.observeAsState(initial = true)
     val contactsPermissionGranted by viewModel.contactsPermissionStatus.observeAsState(initial = false)
     val overlayPermissionGranted by viewModel.overlayPermissionStatus.observeAsState(initial = false)
+    var showDialog by remember { mutableStateOf(!serviceEnabled) }
 
-    // Removed Scaffold and TopAppBar from here
+    if (showDialog && !serviceEnabled) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Enable Service") },
+            text = { Text("To detect encrypted messages, you need to enable the Barcodencrypt accessibility service. This service reads the text on your screen to find messages to decrypt.") },
+            confirmButton = {
+                Button(onClick = {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    showDialog = false
+                }) {
+                    Text("Go to Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("Dismiss")
+                }
+            }
+        )
+    }
+
     Column(
-        modifier = Modifier.padding(16.dp).fillMaxSize(), // Added padding here for content
+        modifier = Modifier.padding(16.dp).fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text(
+            text = "Welcome to Barcodencrypt. Enable the services below to start.",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         ServiceStatusCard(serviceEnabled = serviceEnabled)
         if (serviceEnabled) {
             OverlayPermissionCard(
@@ -240,6 +266,7 @@ fun MainScreen(
 
         Spacer(Modifier.height(32.dp))
 
+        Text("Create a new encrypted message from scratch.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = {
             val intent = Intent(context, ComposeActivity::class.java)
             context.startActivity(intent)
@@ -249,6 +276,7 @@ fun MainScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        Text("Manage the keys for your contacts.", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = onManageContactKeys) {
             Text("Manage Contact Keys")
         }
