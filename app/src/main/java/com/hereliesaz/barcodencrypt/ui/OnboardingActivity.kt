@@ -7,7 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
@@ -37,7 +37,7 @@ class OnboardingActivity : ComponentActivity() {
                 try {
                     val result = credentialManager.getCredential(this@OnboardingActivity, request)
                     onboardingViewModel.handleSignInResult(result)
-                } catch (e: GetCredentialException) {
+                } catch (e: androidx.credentials.exceptions.GetCredentialException) {
                     Log.e("OnboardingActivity", "GetCredentialException", e)
                 }
             }
