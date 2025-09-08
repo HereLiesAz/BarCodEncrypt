@@ -48,7 +48,8 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
     suspend fun encryptMessage(
         plaintext: String,
         barcode: Barcode,
-        options: List<String>
+        options: List<String>,
+        password: String? = null
     ): String? {
         // Get the freshest barcode state from DB to ensure counter is correct
         val freshBarcode = repository.getBarcode(barcode.id) ?: return null
@@ -57,10 +58,12 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
         val updatedBarcode = freshBarcode.copy(counter = freshBarcode.counter + 1)
         repository.updateBarcode(updatedBarcode)
 
+        val ikm = EncryptionManager.getIkm(updatedBarcode, password)
+
         // Encrypt with the new counter value
         return EncryptionManager.encrypt(
             plaintext = plaintext,
-            ikm = updatedBarcode.value,
+            ikm = ikm,
             keyName = updatedBarcode.name,
             counter = updatedBarcode.counter,
             options = options

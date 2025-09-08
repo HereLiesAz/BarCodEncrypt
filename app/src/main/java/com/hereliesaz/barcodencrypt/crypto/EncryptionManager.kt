@@ -120,6 +120,24 @@ object EncryptionManager {
         return SecretKeySpec(keyBytes, ALGORITHM)
     }
 
+    fun getIkm(barcode: com.hereliesaz.barcodencrypt.data.Barcode, password: String? = null): String {
+        return when (barcode.keyType) {
+            com.hereliesaz.barcodencrypt.data.KeyType.SINGLE_BARCODE -> barcode.value
+            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE -> {
+                if (password == null) throw IllegalArgumentException("Password is required for password-protected key")
+                sha256(barcode.value + password)
+            }
+            com.hereliesaz.barcodencrypt.data.KeyType.BARCODE_SEQUENCE -> {
+                barcode.barcodeSequence?.joinToString("") ?: ""
+            }
+            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE -> {
+                if (password == null) throw IllegalArgumentException("Password is required for password-protected key")
+                sha256((barcode.barcodeSequence?.joinToString("") ?: "") + password)
+            }
+            com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD -> barcode.value
+        }
+    }
+
     fun encrypt(
         plaintext: String,
         ikm: String,
