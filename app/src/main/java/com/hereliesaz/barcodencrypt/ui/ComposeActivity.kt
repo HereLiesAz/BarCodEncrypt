@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.R
+import com.hereliesaz.barcodencrypt.crypto.EncryptionManager // Import for constants
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
@@ -162,10 +163,10 @@ fun ComposeScreen(
                 if (message.isNotBlank() && barcode != null) {
                     coroutineScope.launch {
                         val options = mutableListOf<String>()
-                        if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                        if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
                         if (isTimed) {
-                            options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
-                            if(ttlStartsOnOpen) options.add("ttl_on_open=true")
+                            options.add("${EncryptionManager.OPTION_TTL_HOURS_PREFIX}${ttlHours.toDoubleOrNull() ?: 1.0}")
+                            if(ttlStartsOnOpen) options.add(EncryptionManager.OPTION_TTL_ON_OPEN_TRUE)
                         }
 
                         val result = viewModel.encryptMessage(
@@ -292,15 +293,15 @@ fun ComposeScreen(
             onClick = {
                 val barcode = selectedBarcode
                 if (message.isNotBlank() && barcode != null) {
-                    if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE) {
+                    if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE || barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE) { // Added sequence type
                         showPasswordDialog = true
                     } else {
                         coroutineScope.launch {
                             val options = mutableListOf<String>()
-                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
+                            if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
                             if (isTimed) {
-                                options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
-                                if (ttlStartsOnOpen) options.add("ttl_on_open=true")
+                                options.add("${EncryptionManager.OPTION_TTL_HOURS_PREFIX}${ttlHours.toDoubleOrNull() ?: 1.0}")
+                                if (ttlStartsOnOpen) options.add(EncryptionManager.OPTION_TTL_ON_OPEN_TRUE)
                             }
 
                             val result = viewModel.encryptMessage(
@@ -409,4 +410,3 @@ fun KeySelectionDialog(
         }
     )
 }
-

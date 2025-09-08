@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1073139954141",
+    "project_id": "barcodencrypt",
+    "storage_bucket": "barcodencrypt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1073139954141:android:392d82b5dd5e1a82fbc634",
+        "android_client_info": {
+          "package_name": "com.hereliesaz.barcodencrypt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "XXxxXxX_xXXxXXXXXXXXXxXxXxXxxxXxxxxxxxx"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.google.gms.google.services)
 }
 
 kotlin {
@@ -79,6 +80,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.gson)
+    implementation(libs.firebase.auth)
     ksp(libs.androidx.room.compiler)
 
     // Google Sign-In

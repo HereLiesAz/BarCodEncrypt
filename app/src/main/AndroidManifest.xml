@@ -68,6 +68,10 @@
             android:name=".ui.PasswordAssistantActivity"
             android:theme="@style/Theme.Barcodencrypt" />
 
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:theme="@style/Theme.Barcodencrypt" />
+
         <!-- The Watcher, forever vigilant. -->
         <service
             android:name=".services.MessageDetectionService"

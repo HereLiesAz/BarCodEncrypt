@@ -2,14 +2,19 @@ package com.hereliesaz.barcodencrypt.crypto
 
 import android.util.Base64
 import com.google.crypto.tink.Aead
-import com.google.crypto.tink.KeyTemplates
-import com.google.crypto.tink.aead.AeadFactory
-import com.google.crypto.tink.prf.HkdfPrfKeyManager
+import com.google.crypto.tink.subtle.AesGcmJce
+import com.google.crypto.tink.subtle.Hkdf
 import com.google.gson.Gson
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 object EncryptionManager {
+
+    // Constants for message options
+    const val OPTION_SINGLE_USE = "single-use"
+    const val OPTION_TTL_HOURS_PREFIX = "ttl_hours="
+    const val OPTION_TTL_ON_OPEN_TRUE = "ttl_on_open=true"
+
 
     data class DecryptedMessage(
         val plaintext: String,
@@ -23,6 +28,8 @@ object EncryptionManager {
 
     private const val KEY_DERIVATION_ALGORITHM = "SHA-256"
     private const val HEADER_PREFIX_V4 = "~BCEv4~"
+    private const val HKDF_MAC_ALGORITHM = "HMACSHA256" // Corresponds to Tink's PrfHmacSha256
+    private const val DERIVED_KEY_SIZE_BYTES = 32 // For AES-256
 
     fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance(KEY_DERIVATION_ALGORITHM)
@@ -57,17 +64,19 @@ object EncryptionManager {
         maxAttempts: Int = 0
     ): String? {
         return try {
-            val keyTemplate = HkdfPrfKeyManager.hkdfSha256Template()
-            val prfKey = com.google.crypto.tink.KeysetHandle.generateNew(keyTemplate)
-                .getPrimitive(com.google.crypto.tink.prf.Prf::class.java)
-
-            val salt = ByteArray(16)
+            val salt = ByteArray(16) // Standard salt size for HKDF
             java.security.SecureRandom().nextBytes(salt)
-            val outputKey = prfKey.compute(ikm.toByteArray(StandardCharsets.UTF_8), salt, 32)
 
-            val aead = AeadFactory.getPrimitive(
-                com.google.crypto.tink.KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM"))
+            // Derive encryption key using HKDF
+            val derivedKeyBytes = Hkdf.computeHkdf(
+                HKDF_MAC_ALGORITHM,
+                ikm.toByteArray(StandardCharsets.UTF_8),
+                salt,
+                null, // No specific "info" field for now
+                DERIVED_KEY_SIZE_BYTES
             )
+
+            val aead: Aead = AesGcmJce(derivedKeyBytes)
 
             val associatedData = createAssociatedData(keyName, counter, options, maxAttempts)
             val ciphertext = aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), associatedData)
@@ -89,7 +98,7 @@ object EncryptionManager {
         }
     }
 
-    fun parseMessage(ciphertext: String): TinkMessage? {
+    internal fun parseMessage(ciphertext: String): TinkMessage? {
         if (!ciphertext.startsWith(HEADER_PREFIX_V4)) {
             return null
         }
@@ -113,23 +122,25 @@ object EncryptionManager {
 
     private fun decryptMessage(message: TinkMessage, ikm: String): DecryptedMessage? {
         return try {
-            val keyTemplate = HkdfPrfKeyManager.hkdfSha256Template()
-            val prfKey = com.google.crypto.tink.KeysetHandle.generateNew(keyTemplate)
-                .getPrimitive(com.google.crypto.tink.prf.Prf::class.java)
-            val outputKey = prfKey.compute(ikm.toByteArray(StandardCharsets.UTF_8), message.salt, 32)
-
-            val aead = AeadFactory.getPrimitive(
-                com.google.crypto.tink.KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM"))
+            // Derive encryption key using HKDF with the message's salt
+            val derivedKeyBytes = Hkdf.computeHkdf(
+                HKDF_MAC_ALGORITHM,
+                ikm.toByteArray(StandardCharsets.UTF_8),
+                message.salt,
+                null, // Must match encryption if "info" was used
+                DERIVED_KEY_SIZE_BYTES
             )
+
+            val aead: Aead = AesGcmJce(derivedKeyBytes)
 
             val associatedData = createAssociatedData(message.keyName, message.counter, message.options, message.maxAttempts)
             val decrypted = aead.decrypt(message.ciphertext, associatedData)
             val plaintext = String(decrypted, StandardCharsets.UTF_8)
 
-            val singleUse = message.options.contains("single-use")
-            val ttlOnOpen = message.options.contains("ttl_on_open=true")
-            val ttlHoursString = message.options.find { it.startsWith("ttl_hours=") }
-            val ttlHours = ttlHoursString?.removePrefix("ttl_hours=")?.toIntOrNull()
+            val singleUse = message.options.contains(OPTION_SINGLE_USE)
+            val ttlOnOpen = message.options.contains(OPTION_TTL_ON_OPEN_TRUE)
+            val ttlHoursString = message.options.find { it.startsWith(OPTION_TTL_HOURS_PREFIX) }
+            val ttlHours = ttlHoursString?.removePrefix(OPTION_TTL_HOURS_PREFIX)?.toIntOrNull()
 
             DecryptedMessage(
                 plaintext = plaintext,
@@ -157,7 +168,8 @@ object EncryptionManager {
         return gson.toJson(data).toByteArray(StandardCharsets.UTF_8)
     }
 
-    private data class TinkMessage(
+    // Made internal to be accessible from other modules like OverlayService
+    internal data class TinkMessage(
         val salt: ByteArray,
         val ciphertext: ByteArray,
         val keyName: String,
