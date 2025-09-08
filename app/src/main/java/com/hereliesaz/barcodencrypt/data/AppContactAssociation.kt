@@ -15,7 +15,10 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["packageName", "contactLookupKey"], unique = true)]
+    indices = [
+        Index(value = ["packageName", "contactLookupKey"], unique = true),
+        Index(value = ["contactLookupKey"])
+    ]
 )
 data class AppContactAssociation(
     @PrimaryKey(autoGenerate = true)
