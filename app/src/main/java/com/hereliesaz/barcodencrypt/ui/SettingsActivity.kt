@@ -74,15 +74,24 @@ class SettingsActivity : ComponentActivity() {
 
         fun getInstalledAppsWithNames(context: Context): List<AppInfo> {
             val pm = context.packageManager
-            val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            // Using 0 as a flag is fine if not specifically needing GET_META_DATA for this list generation
+            val packages = pm.getInstalledApplications(0)
             return packages.mapNotNull { appInfo ->
                 try {
                     val appName = pm.getApplicationLabel(appInfo).toString()
-                    // Filter to include non-system apps and updated system apps
-                    if (((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) || ((appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)) {
+                    // Filter to include apps that have a launch intent (most user-interactive apps)
+                    // This is generally more inclusive than filtering by system/updated_system flags alone.
+                    if (pm.getLaunchIntentForPackage(appInfo.packageName) != null) {
                         AppInfo(appInfo.packageName, appName)
                     } else {
-                        null // Filter out pure system apps
+                        // Optionally, include apps without launch intents if they are not system apps
+                        // This might include certain services or apps that are not directly launchable
+                        // but might still be relevant for message detection in some edge cases.
+                        if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) {
+                             AppInfo(appInfo.packageName, appName) // Include non-system apps even without launch intent
+                        } else {
+                            null // Filter out system apps without launch intents
+                        }
                     }
                 } catch (e: Exception) {
                     null // Skip if app name can't be retrieved or other error
