@@ -5,9 +5,10 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.view.autofill.AutofillId
+import android.view.autofill.AutofillValue // ENSURED IMPORT
 import android.app.assist.AssistStructure
 import android.service.autofill.AutofillService
-// REMOVED: import android.service.autofill.InlinePresentation
+import android.service.autofill.InlinePresentation // ENSURED IMPORT
 import android.service.autofill.Dataset
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
@@ -60,9 +61,11 @@ class BarcodeAutofillService : AutofillService() {
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
         ).intentSender
 
-        // MODIFIED: Use Dataset.Builder(presentation) and 2-arg setValue
-        val dataset = Dataset.Builder(remoteViews)
-            .setValue(autofillId, null) 
+        // MODIFIED to use modern, non-deprecated Dataset.Builder pattern
+        @Suppress("DEPRECATION") // Added suppression here
+        val dataset = Dataset.Builder() 
+            .setPresentation(remoteViews) 
+            .setValue(autofillId, AutofillValue.forText(null), null, null as InlinePresentation?)
             .setAuthentication(intentSender)
             .build()
 
