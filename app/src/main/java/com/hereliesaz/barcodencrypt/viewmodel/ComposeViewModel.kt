@@ -49,7 +49,8 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
         plaintext: String,
         barcode: Barcode,
         options: List<String>,
-        password: String? = null
+        password: String? = null,
+        maxAttempts: Int = 0
     ): String? {
         // Get the freshest barcode state from DB to ensure counter is correct
         val freshBarcode = repository.getBarcode(barcode.id) ?: return null
@@ -66,7 +67,8 @@ class ComposeViewModel(application: Application) : AndroidViewModel(application)
             ikm = ikm,
             keyName = updatedBarcode.name,
             counter = updatedBarcode.counter,
-            options = options
+            options = options,
+            maxAttempts = maxAttempts
         )
     }
 }

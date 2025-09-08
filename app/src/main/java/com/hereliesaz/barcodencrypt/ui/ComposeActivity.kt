@@ -144,6 +144,8 @@ fun ComposeScreen(
     var ttlHours by remember { mutableStateOf("1.0") }
     var ttlStartsOnOpen by remember { mutableStateOf(false) }
     var showKeySelectionDialog by remember { mutableStateOf(false) }
+    var limitAttempts by remember { mutableStateOf(false) }
+    var maxAttempts by remember { mutableStateOf("5") }
 
     LaunchedEffect(barcodes) {
         selectedBarcode = barcodes.firstOrNull()
@@ -175,7 +177,8 @@ fun ComposeScreen(
                             plaintext = message,
                             barcode = barcode,
                             options = options,
-                            password = password
+                            password = password,
+                            maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
                         )
                         if (result != null) {
                             encryptedText = result
@@ -244,6 +247,22 @@ fun ComposeScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
+            Checkbox(checked = limitAttempts, onCheckedChange = { limitAttempts = it })
+            Text("Limit decryption attempts:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = maxAttempts,
+                onValueChange = { maxAttempts = it.filter { char -> char.isDigit() } },
+                label = { Text("Attempts") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = limitAttempts,
+                modifier = Modifier.width(120.dp)
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
             Text("Timed message: this message will disappear after a set time.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             OutlinedTextField(
@@ -287,7 +306,8 @@ fun ComposeScreen(
                             val result = viewModel.encryptMessage(
                                 plaintext = message,
                                 barcode = barcode,
-                                options = options
+                                options = options,
+                                maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
                             )
                             if (result != null) {
                                 encryptedText = result
