@@ -23,7 +23,7 @@ class MessageDetectionService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        globallyAssociatedApps = applicationContext?.let { SettingsActivity.loadAssociatedApps(it) } ?: emptySet()
+        globallyAssociatedApps = applicationContext?.let { SettingsActivity.Companion.loadAssociatedApps(it) } ?: emptySet()
         Log.d(TAG, "Watcher service has been created. Associated apps: $globallyAssociatedApps")
     }
 
@@ -31,7 +31,7 @@ class MessageDetectionService : AccessibilityService() {
         val currentPackageName = event?.packageName?.toString() ?: return
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            globallyAssociatedApps = applicationContext?.let { SettingsActivity.loadAssociatedApps(it) } ?: emptySet()
+            globallyAssociatedApps = applicationContext?.let { SettingsActivity.Companion.loadAssociatedApps(it) } ?: emptySet()
         }
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && globallyAssociatedApps.contains(currentPackageName)) {
