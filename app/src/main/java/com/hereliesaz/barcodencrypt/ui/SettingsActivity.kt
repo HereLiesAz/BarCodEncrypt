@@ -60,6 +60,12 @@ class SettingsActivity : ComponentActivity() {
                     onNavigateToSettings = {
                         // Already in settings, do nothing or refresh if needed
                     },
+                    onNavigateToTryMe = {
+                        com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
+                        startActivity(Intent(this, ScannerActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
                     screenContent = {
                         SettingsScreen(viewModel)
                     }

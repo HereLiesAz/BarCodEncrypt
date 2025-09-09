@@ -7,7 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme

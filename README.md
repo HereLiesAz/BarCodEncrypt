@@ -25,16 +25,14 @@ BarCodEncrypt supports two advanced key types for enhanced security:
 
 You can also combine these two features to create a password-protected barcode sequence key.
 
-### Advanced Key Types
+### Interactive Tutorial ("Try Me")
 
-BarCodEncrypt supports two advanced key types for enhanced security:
+For new users, the app includes a "Try Me" button on the main navigation rail. This interactive tutorial guides you through a complete encryption and decryption cycle without needing a second person or device. It will walk you through:
+1.  Scanning a barcode to act as a temporary, secret key.
+2.  Showing you a mock conversation where a message is encrypted with your key.
+3.  Guiding you to tap the highlighted message and scan the same barcode again to decrypt it.
 
-*   **Password-Protected Keys:** When creating a key, you can choose to protect it with a password. When encrypting or decrypting with this key, you will be prompted to enter the password. The key is derived from both the barcode and the password, so an attacker would need both to compromise your messages.
-*   **Barcode Sequence Keys:** You can use a sequence of barcodes as a single key. When creating the key, you can scan multiple barcodes in a specific order. To encrypt or decrypt, you will need to scan the same barcodes in the same order. This adds another layer of security, as an attacker would need to know the correct sequence of barcodes.
-
-You can also combine these two features to create a password-protected barcode sequence key.
-
-### Decryption
+### Encryption
 1.  **Manage Keys:** From the main screen, select "Manage Contact Keys" to choose a contact from your phone's address book.
 2.  **Assign Barcode:** In the contact detail screen, tap the '+' button to open the scanner. Scan a barcode and give it a unique name to assign it to that contact.
 3.  **Compose:** From the main screen, select "Compose Message". Select your recipient and the specific key you want to use.

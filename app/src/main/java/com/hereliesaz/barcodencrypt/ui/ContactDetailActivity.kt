@@ -115,6 +115,12 @@ class ContactDetailActivity : ComponentActivity() {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
+                    onNavigateToTryMe = {
+                        com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
+                        startActivity(Intent(this, ScannerActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
                     onNavigateToCompose = {
                         startActivity(Intent(this, ComposeActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP

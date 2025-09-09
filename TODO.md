@@ -19,6 +19,10 @@ A list of sorrows now embraced.
 -   [x] Create the UI for adding/managing contacts and their associated barcodes (`ContactDetailActivity`).
 -   [x] Create the UI for composing and encrypting a new message (`ComposeActivity`).
 
+## User Experience
+
+-   [x] Add an interactive "Try Me" tutorial to guide new users through the core encryption/decryption workflow.
+
 ## Refinements & Fixes
 
 -   [x] The app does not yet ask for Accessibility Service permissions. The user must enable it manually. This needs a proper onboarding flow. (MainActivity now guides the user to the settings).

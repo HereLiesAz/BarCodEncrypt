@@ -9,11 +9,13 @@ import com.hereliesaz.aznavrail.AzNavRail
 fun AppNavRail(
     onManageContactKeys: () -> Unit,
     onComposeMessage: () -> Unit,
-    onSettings: () -> Unit // Added settings callback
+    onSettings: () -> Unit,
+    onNavigateToTryMe: () -> Unit,
 ) {
     val manageKeysText = stringResource(id = R.string.manage_contact_keys)
     val composeText = stringResource(id = R.string.compose_message)
-    val settingsText = stringResource(id = R.string.settings) // Added settings text resource
+    val settingsText = stringResource(id = R.string.settings)
+    val tryMeText = stringResource(id = R.string.try_me)
 
     AzNavRail {
         azRailItem(
@@ -27,9 +29,14 @@ fun AppNavRail(
             onClick = onComposeMessage
         )
         azRailItem(
-            id = "settings", // Added settings item
+            id = "settings",
             text = settingsText,
             onClick = onSettings
+        )
+        azRailItem(
+            id = "try_me",
+            text = tryMeText,
+            onClick = onNavigateToTryMe
         )
     }
 }

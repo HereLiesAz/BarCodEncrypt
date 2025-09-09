@@ -18,6 +18,7 @@ fun AppScaffoldWithNavRail(
     onNavigateToManageKeys: () -> Unit,
     onNavigateToCompose: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToTryMe: () -> Unit,
     screenTitle: String,
     navigationIcon: @Composable (() -> Unit)? = null,
     floatingActionButton: @Composable () -> Unit = {},
@@ -47,7 +48,8 @@ fun AppScaffoldWithNavRail(
             AppNavRail(
                 onManageContactKeys = onNavigateToManageKeys,
                 onComposeMessage = onNavigateToCompose,
-                onSettings = onNavigateToSettings
+                onSettings = onNavigateToSettings,
+                onNavigateToTryMe = onNavigateToTryMe
             )
             Box(
                 modifier = Modifier
