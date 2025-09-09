@@ -86,6 +86,7 @@ class ScannerActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
+                    screenTitle = "Scan Barcode",
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP

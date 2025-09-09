@@ -142,7 +142,7 @@ class OverlayService : Service() {
                     removeOverlay()
                     stopSelf()
                 }
-                overlayState.value = OverlayState.Success(decrypted)
+                overlayState.value = OverlayState.Success(decrypted.plaintext)
             } else {
                 overlayState.value = OverlayState.Failure
             }
@@ -219,7 +219,7 @@ class OverlayService : Service() {
                             ttlInSeconds = (ttlHours * 3600).toLong()
                         }
 
-                        overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
+                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
 
                         if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                             val messageHash = EncryptionManager.sha256(fullEncryptedText)

@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         AppScaffoldWithNavRail(
+                            screenTitle = "Dashboard",
                             onNavigateToManageKeys = onManageContactKeysLambda,
                             onNavigateToCompose = {
                                 startActivity(Intent(this, ComposeActivity::class.java).apply {
