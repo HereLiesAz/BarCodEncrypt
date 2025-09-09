@@ -16,46 +16,34 @@ import java.util.concurrent.ConcurrentHashMap
 
 class MessageDetectionService : AccessibilityService() {
 
-    // private lateinit var contactRepository: ContactRepository // No longer directly used for decryption logic here
-    // private lateinit var revokedMessageRepository: RevokedMessageRepository // Will be used by OverlayService
     private lateinit var serviceScope: CoroutineScope
     private val seenMessages = ConcurrentHashMap<String, Long>()
     private var globallyAssociatedApps: Set<String> = emptySet()
 
     override fun onCreate() {
         super.onCreate()
-        // val database = AppDatabase.getDatabase(application) // Not needed if repos are not used directly
-        // contactRepository = ContactRepository(database.contactDao()) // Handled by OverlayService
-        // revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao()) // Handled by OverlayService
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        globallyAssociatedApps = SettingsActivity.loadAssociatedApps(applicationContext)
+        globallyAssociatedApps = applicationContext?.let { SettingsActivity.loadAssociatedApps(it) } ?: emptySet()
         Log.d(TAG, "Watcher service has been created. Associated apps: $globallyAssociatedApps")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val currentPackageName = event?.packageName?.toString() ?: return
 
-        // Refresh associated apps on window change events, in case settings changed.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            globallyAssociatedApps = SettingsActivity.loadAssociatedApps(applicationContext)
+            globallyAssociatedApps = applicationContext?.let { SettingsActivity.loadAssociatedApps(it) } ?: emptySet()
         }
 
-        // Only process events from globally associated apps for message detection
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && globallyAssociatedApps.contains(currentPackageName)) {
             val sourceNode = event.source ?: return
             findEncryptedMessages(sourceNode)
-            // sourceNode.recycle() // System handles recycling
-        } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) { // Password field focus can be for any app
+        } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
             val sourceNode = event.source ?: return
             if (sourceNode.isPassword) {
                 val bounds = Rect()
                 sourceNode.getBoundsInScreen(bounds)
-                // PasswordPasteManager.prepareForPaste(sourceNode) // This should likely be in OverlayService or triggered by user action there
                 summonPasswordOverlay(bounds)
-            } else {
-                // PasswordPasteManager.clear() // Similarly, clear if overlay is dismissed
             }
-            // sourceNode.recycle() // System handles recycling
         }
     }
 
@@ -74,12 +62,9 @@ class MessageDetectionService : AccessibilityService() {
             val fullMatch = matchResult.value
             val now = System.currentTimeMillis()
 
-            // Check cooldown for this specific message content
             if (seenMessages.getOrPut(fullMatch) { 0L } < now - COOLDOWN_MS) {
                 seenMessages[fullMatch] = now
                 
-                // Current app's package name should be checked before this point,
-                // ensured by the onAccessibilityEvent logic.
                 Log.d(TAG, "Potential message found in associated app: ${nodeInfo.packageName}")
                 serviceScope.launch {
                     val bounds = Rect()
@@ -101,7 +86,6 @@ class MessageDetectionService : AccessibilityService() {
     private fun summonDecryptionOverlay(encryptedText: String, bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
-            // Optionally, notify user they need to grant permission
             return
         }
 
@@ -109,7 +93,6 @@ class MessageDetectionService : AccessibilityService() {
             action = OverlayService.ACTION_DECRYPT_MESSAGE
             putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
-            // OverlayService will be responsible for fetching contact info and keys
         }
         startService(intent)
     }
