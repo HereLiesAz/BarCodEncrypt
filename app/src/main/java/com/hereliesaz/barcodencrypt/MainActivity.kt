@@ -144,7 +144,15 @@ class MainActivity : ComponentActivity() {
                             },
                             onNavigateToTryMe = {
                                 com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
-                                startActivity(Intent(this, ScannerActivity::class.java))
+                                lifecycleScope.launch {
+                                    ScannerManager.requestScan { barcode ->
+                                        if (barcode != null) {
+                                            com.hereliesaz.barcodencrypt.util.TutorialManager.onBarcodeScanned(barcode)
+                                            val intent = Intent(this@MainActivity, MockMessagesActivity::class.java)
+                                            startActivity(intent)
+                                        }
+                                    }
+                                }
                             },
                             screenContent = {
                                 MainScreen(

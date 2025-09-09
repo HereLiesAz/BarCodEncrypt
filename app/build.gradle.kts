@@ -5,11 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-kotlin {
-    jvmToolchain(17)
-}
-
 android {
+    kotlinOptions {
+        jvmTarget = "17"
+    }
     namespace = "com.hereliesaz.barcodencrypt"
     compileSdk = 36
 
