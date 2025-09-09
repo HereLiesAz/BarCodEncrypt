@@ -115,6 +115,7 @@ class ContactDetailActivity : ComponentActivity() {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
+                    onNavigateToTryMe = {},
                     onNavigateToCompose = {
                         startActivity(Intent(this, ComposeActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP

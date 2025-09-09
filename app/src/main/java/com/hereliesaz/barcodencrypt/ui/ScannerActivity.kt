@@ -67,6 +67,14 @@ class ScannerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning()) {
+            com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                this,
+                "Tutorial: Step 1",
+                "Scan any barcode. This will be your secret key."
+            )
+        }
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             setupCamera()
         } else {
@@ -85,6 +93,7 @@ class ScannerActivity : ComponentActivity() {
                         })
                         finish()
                     },
+                    onNavigateToTryMe = {},
                     onNavigateToCompose = {
                         startActivity(Intent(this, ComposeActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -101,11 +110,17 @@ class ScannerActivity : ComponentActivity() {
                         ScannerScreen(
                             onBarcodeFound = { barcodeValue ->
                                 if (isFinishing || isDestroyed) return@ScannerScreen
-                                val resultIntent = Intent().apply {
-                                    putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
+                                if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning()) {
+                                    com.hereliesaz.barcodencrypt.util.TutorialManager.onBarcodeScanned(barcodeValue)
+                                    startActivity(Intent(this, MockMessagesActivity::class.java))
+                                    finish()
+                                } else {
+                                    val resultIntent = Intent().apply {
+                                        putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
+                                    }
+                                    setResult(Activity.RESULT_OK, resultIntent)
+                                    finish()
                                 }
-                                setResult(Activity.RESULT_OK, resultIntent)
-                                finish()
                             }
                         )
                     }
