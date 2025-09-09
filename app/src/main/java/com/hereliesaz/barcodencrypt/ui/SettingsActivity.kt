@@ -15,6 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator // Added
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.annotation.RequiresApi
+// import com.google.android.material.loadingindicator.LoadingIndicator // Removed
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.services.BarcodeAutofillService
@@ -97,10 +100,10 @@ class SettingsActivity : ComponentActivity() {
                     val appName = pm.getApplicationLabel(appInfo).toString()
                     AppInfo(appInfo.packageName, appName)
                 } catch (e: Exception) {
-                    null 
+                    null
                 }
             }.sortedBy { it.appName.lowercase() }
-            
+
             Log.d(TAG_SETTINGS_ACTIVITY, "Total appInfos mapped to AppInfo objects: ${appInfos.size}")
             val voiceAppInMappedList = appInfos.find { it.packageName == GOOGLE_VOICE_PACKAGE_NAME }
             if (voiceAppInMappedList != null) {
@@ -117,6 +120,7 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
+                    screenTitle = "Settings",
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -186,10 +190,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     var allInstalledApps by remember { mutableStateOf(emptyList<AppInfo>()) }
     var globallyAssociatedApps by remember { mutableStateOf(emptySet<String>()) }
     var searchQuery by remember { mutableStateOf("") }
+    var isLoadingApps by remember { mutableStateOf(true) } // Added loading state
 
     LaunchedEffect(key1 = context) {
+        isLoadingApps = true // Start loading
         allInstalledApps = SettingsActivity.getInstalledAppsWithNames(context)
         globallyAssociatedApps = SettingsActivity.loadAssociatedApps(context)
+        isLoadingApps = false // Done loading
     }
 
     val filteredApps = if (searchQuery.isEmpty()) {
@@ -236,46 +243,60 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Search Apps") },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-        )
+        if (isLoadingApps) {
+            Column( // Wrapper Column to center the progress indicator
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f), // Takes up available space in the parent Column
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator() // Using Material 3 CircularProgressIndicator
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Loading apps...")
+            }
+        } else {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search Apps") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            )
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(filteredApps) { app ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val newSet = globallyAssociatedApps.toMutableSet()
-                            if (app.packageName in newSet) {
-                                newSet.remove(app.packageName)
-                            } else {
-                                newSet.add(app.packageName)
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(filteredApps) { app ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val newSet = globallyAssociatedApps.toMutableSet()
+                                if (app.packageName in newSet) {
+                                    newSet.remove(app.packageName)
+                                } else {
+                                    newSet.add(app.packageName)
+                                }
+                                globallyAssociatedApps = newSet
+                                SettingsActivity.saveAssociatedApps(context, newSet)
                             }
-                            globallyAssociatedApps = newSet
-                            SettingsActivity.saveAssociatedApps(context, newSet)
-                        }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = app.packageName in globallyAssociatedApps,
-                        onCheckedChange = { isChecked ->
-                            val newSet = globallyAssociatedApps.toMutableSet()
-                            if (isChecked) {
-                                newSet.add(app.packageName)
-                            } else {
-                                newSet.remove(app.packageName)
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = app.packageName in globallyAssociatedApps,
+                            onCheckedChange = { isChecked ->
+                                val newSet = globallyAssociatedApps.toMutableSet()
+                                if (isChecked) {
+                                    newSet.add(app.packageName)
+                                } else {
+                                    newSet.remove(app.packageName)
+                                }
+                                globallyAssociatedApps = newSet
+                                SettingsActivity.saveAssociatedApps(context, newSet)
                             }
-                            globallyAssociatedApps = newSet
-                            SettingsActivity.saveAssociatedApps(context, newSet)
-                        }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(app.appName, style = MaterialTheme.typography.bodyMedium)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(app.appName, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }
