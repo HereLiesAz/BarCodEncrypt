@@ -73,6 +73,7 @@ class ComposeActivity : ComponentActivity() {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
+                    onNavigateToTryMe = {},
                     onNavigateToCompose = { /* Already here */ },
                     onNavigateToSettings = {
                         startActivity(Intent(this, SettingsActivity::class.java).apply {

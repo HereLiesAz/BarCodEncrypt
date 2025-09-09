@@ -18,11 +18,26 @@ fun AppScaffoldWithNavRail(
     onNavigateToManageKeys: () -> Unit,
     onNavigateToCompose: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToTryMe: () -> Unit,
+    screenTitle: String,
+    navigationIcon: @Composable (() -> Unit)? = null,
     floatingActionButton: @Composable () -> Unit = {},
     screenContent: @Composable () -> Unit
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        topBar = {
+            if (navigationIcon != null) {
+                TopAppBar(
+                    title = { Text(screenTitle) },
+                    navigationIcon = navigationIcon
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(screenTitle) }
+                )
+            }
+        },
         floatingActionButton = floatingActionButton
     ) { scaffoldPadding ->
         Row(
@@ -33,7 +48,8 @@ fun AppScaffoldWithNavRail(
             AppNavRail(
                 onManageContactKeys = onNavigateToManageKeys,
                 onComposeMessage = onNavigateToCompose,
-                onSettings = onNavigateToSettings
+                onSettings = onNavigateToSettings,
+                onNavigateToTryMe = onNavigateToTryMe
             )
             Box(
                 modifier = Modifier

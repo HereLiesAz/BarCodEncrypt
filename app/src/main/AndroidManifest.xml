@@ -90,6 +90,11 @@
             android:name=".services.OverlayService"
             android:exported="false"/>
 
+        <activity
+            android:name=".ui.MockMessagesActivity"
+            android:label="Mock Conversation"
+            android:theme="@style/Theme.Barcodencrypt" />
+
     </application>
 
 </manifest>

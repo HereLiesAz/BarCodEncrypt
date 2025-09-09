@@ -41,7 +41,6 @@ import com.hereliesaz.barcodencrypt.ui.PasswordScannerTrampolineActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.DecryptionAttemptManager
 import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import com.hereliesaz.barcodencrypt.util.ScannerManager
@@ -57,7 +56,6 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var revokedMessageRepository: RevokedMessageRepository
-    private lateinit var decryptionAttemptManager: DecryptionAttemptManager
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
@@ -72,7 +70,6 @@ class OverlayService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
-        decryptionAttemptManager = DecryptionAttemptManager(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -92,8 +89,19 @@ class OverlayService : Service() {
                 }
 
                 barcodeName = MessageParser.getBarcodeNameFromMessage(encryptedText!!)
-                overlayState.value = OverlayState.Initial
-                createOverlay(bounds)
+                if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
+                    com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                        this,
+                        "Tutorial: Step 2",
+                        "Now, tap the highlighted text to decrypt the message."
+                    ) {
+                        overlayState.value = OverlayState.Initial
+                        createOverlay(bounds)
+                    }
+                } else {
+                    overlayState.value = OverlayState.Initial
+                    createOverlay(bounds)
+                }
             }
             ACTION_SHOW_PASSWORD_ICON -> {
                 val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -119,6 +127,25 @@ class OverlayService : Service() {
         val bName = barcodeName
         if (scannedKey == null || bName == null) {
             overlayState.value = OverlayState.Failure
+            return
+        }
+
+        if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && bName == "tutorial_key") {
+            val decrypted = EncryptionManager.decrypt(fullEncryptedText, scannedKey)
+            if (decrypted != null) {
+                com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                    this,
+                    "Tutorial Complete!",
+                    "You have successfully decrypted the message."
+                ) {
+                    com.hereliesaz.barcodencrypt.util.TutorialManager.stopTutorial()
+                    removeOverlay()
+                    stopSelf()
+                }
+                overlayState.value = OverlayState.Success(decrypted)
+            } else {
+                overlayState.value = OverlayState.Failure
+            }
             return
         }
 
@@ -171,30 +198,36 @@ class OverlayService : Service() {
 
             withContext(Dispatchers.Main) {
                 if (decrypted != null) {
-                    val remainingAttempts = decryptionAttemptManager.getRemainingAttempts(fullEncryptedText, decrypted.maxAttempts)
-                    if (remainingAttempts <= 0 && decrypted.maxAttempts > 0) {
-                        overlayState.value = OverlayState.Failure
-                        return@withContext
-                    }
-
-                    decryptionAttemptManager.resetAttempts(fullEncryptedText) // Clear attempts on success
-                    val ttlInSeconds = if (decrypted.ttlOnOpen && decrypted.ttlHours != null) {
-                        (decrypted.ttlHours * 3600).toLong()
+                    if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
+                        com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                            this@OverlayService,
+                            "Tutorial Complete!",
+                            "You have successfully decrypted the message."
+                        ) {
+                            com.hereliesaz.barcodencrypt.util.TutorialManager.stopTutorial()
+                            removeOverlay()
+                            stopSelf()
+                        }
                     } else {
-                        null
-                    }
-                    overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
+                        val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
+                        val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
+                        val ttlHours = ttlHoursString?.removePrefix("ttl_hours=")?.toDoubleOrNull()
+                        val ttlOnOpen = options.contains("ttl_on_open=true")
 
-                    if (decrypted.singleUse) {
-                        val messageHash = EncryptionManager.sha256(fullEncryptedText)
-                        revokedMessageRepository.revokeMessage(messageHash)
-                        Log.i(TAG, "Single-use message has been revoked.")
+                        var ttlInSeconds: Long? = null
+                        if (ttlHours != null && ttlOnOpen) {
+                            ttlInSeconds = (ttlHours * 3600).toLong()
+                        }
+
+                        overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
+
+                        if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
+                            val messageHash = EncryptionManager.sha256(fullEncryptedText)
+                            revokedMessageRepository.revokeMessage(messageHash)
+                            Log.i(TAG, "Single-use message has been revoked.")
+                        }
                     }
                 } else {
-                    val tinkMessage = EncryptionManager.parseMessage(fullEncryptedText)
-                    if (tinkMessage != null) {
-                        decryptionAttemptManager.recordFailedAttempt(fullEncryptedText, tinkMessage.maxAttempts)
-                    }
                     overlayState.value = OverlayState.Failure
                 }
             }

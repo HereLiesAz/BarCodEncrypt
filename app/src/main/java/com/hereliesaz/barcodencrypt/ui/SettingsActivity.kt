@@ -130,6 +130,7 @@ class SettingsActivity : ComponentActivity() {
                     onNavigateToSettings = {
                         // Already in settings, do nothing or refresh if needed
                     },
+                    onNavigateToTryMe = {},
                     screenContent = {
                         SettingsScreen(viewModel)
                     }
