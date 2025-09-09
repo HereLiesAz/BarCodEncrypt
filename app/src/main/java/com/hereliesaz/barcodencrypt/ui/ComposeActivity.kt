@@ -1,6 +1,5 @@
 package com.hereliesaz.barcodencrypt.ui
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.R
-import com.hereliesaz.barcodencrypt.crypto.EncryptionManager // Import for constants
 import com.hereliesaz.barcodencrypt.data.Barcode
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
@@ -68,12 +66,23 @@ class ComposeActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 AppScaffoldWithNavRail(
+                    screenTitle = stringResource(id = R.string.compose_message),
+                    navigationIcon = {
+                        IconButton(onClick = { finish() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") // Changed
+                        }
+                    },
                     onNavigateToManageKeys = {
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
-                    onNavigateToTryMe = {},
+                    onNavigateToTryMe = {
+                        com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
+                        startActivity(Intent(this, ScannerActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                    },
                     onNavigateToCompose = { /* Already here */ },
                     onNavigateToSettings = {
                         startActivity(Intent(this, SettingsActivity::class.java).apply {
@@ -141,8 +150,6 @@ fun ComposeScreen(
     var ttlHours by remember { mutableStateOf("1.0") }
     var ttlStartsOnOpen by remember { mutableStateOf(false) }
     var showKeySelectionDialog by remember { mutableStateOf(false) }
-    var limitAttempts by remember { mutableStateOf(false) }
-    var maxAttempts by remember { mutableStateOf("5") }
 
     LaunchedEffect(barcodes) {
         selectedBarcode = barcodes.firstOrNull()
@@ -164,18 +171,17 @@ fun ComposeScreen(
                 if (message.isNotBlank() && barcode != null) {
                     coroutineScope.launch {
                         val options = mutableListOf<String>()
-                        if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
+                        if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
                         if (isTimed) {
-                            options.add("${EncryptionManager.OPTION_TTL_HOURS_PREFIX}${ttlHours.toDoubleOrNull() ?: 1.0}")
-                            if(ttlStartsOnOpen) options.add(EncryptionManager.OPTION_TTL_ON_OPEN_TRUE)
+                            options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
+                            if(ttlStartsOnOpen) options.add("ttl_on_open=true")
                         }
 
                         val result = viewModel.encryptMessage(
                             plaintext = message,
                             barcode = barcode,
                             options = options,
-                            password = password,
-                            maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
+                            password = password
                         )
                         if (result != null) {
                             encryptedText = result
@@ -189,11 +195,6 @@ fun ComposeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-
-        val activity = (LocalContext.current as? Activity)
-        IconButton(onClick = { activity?.finish() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-        }
 
         Text(
             text = "Select a recipient, type your message, and then encrypt it.",
@@ -249,22 +250,6 @@ fun ComposeScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Checkbox(checked = limitAttempts, onCheckedChange = { limitAttempts = it })
-            Text("Limit decryption attempts:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            OutlinedTextField(
-                value = maxAttempts,
-                onValueChange = { maxAttempts = it.filter { char -> char.isDigit() } },
-                label = { Text("Attempts") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                enabled = limitAttempts,
-                modifier = Modifier.width(120.dp)
-            )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
             Checkbox(checked = isTimed, onCheckedChange = { isTimed = it })
             Text("Timed message: this message will disappear after a set time.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             OutlinedTextField(
@@ -294,22 +279,21 @@ fun ComposeScreen(
             onClick = {
                 val barcode = selectedBarcode
                 if (message.isNotBlank() && barcode != null) {
-                    if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE || barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE_SEQUENCE) { // Added sequence type
+                    if (barcode.keyType == com.hereliesaz.barcodencrypt.data.KeyType.PASSWORD_PROTECTED_BARCODE) {
                         showPasswordDialog = true
                     } else {
                         coroutineScope.launch {
                             val options = mutableListOf<String>()
-                            if (isSingleUse) options.add(EncryptionManager.OPTION_SINGLE_USE)
+                            if (isSingleUse) options.add(com.hereliesaz.barcodencrypt.crypto.EncryptionManager.OPTION_SINGLE_USE)
                             if (isTimed) {
-                                options.add("${EncryptionManager.OPTION_TTL_HOURS_PREFIX}${ttlHours.toDoubleOrNull() ?: 1.0}")
-                                if (ttlStartsOnOpen) options.add(EncryptionManager.OPTION_TTL_ON_OPEN_TRUE)
+                                options.add("ttl_hours=${ttlHours.toDoubleOrNull() ?: 1.0}")
+                                if (ttlStartsOnOpen) options.add("ttl_on_open=true")
                             }
 
                             val result = viewModel.encryptMessage(
                                 plaintext = message,
                                 barcode = barcode,
-                                options = options,
-                                maxAttempts = if (limitAttempts) maxAttempts.toIntOrNull() ?: 0 else 0
+                                options = options
                             )
                             if (result != null) {
                                 encryptedText = result
@@ -411,3 +395,4 @@ fun KeySelectionDialog(
         }
     )
 }
+

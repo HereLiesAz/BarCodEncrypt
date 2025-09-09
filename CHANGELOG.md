@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### 0.2.0 - The Oracle - 2025-09-08
+
+#### Added
+-   **Interactive Tutorial ("Try Me"):** A new "Try Me" button on the main navigation rail launches an interactive tutorial. This guides new users through a complete encryption and decryption cycle without needing a second person or device. It includes a mock chat interface to simulate a real conversation.
+-   **`TutorialManager`:** A singleton to manage the state of the interactive tutorial.
+-   **`MockMessagesActivity`:** A new activity to display the mock conversation for the tutorial.
+
 ### 0.1.0 - The Ghost in the Machine - 2025-09-06
 
 #### Added
