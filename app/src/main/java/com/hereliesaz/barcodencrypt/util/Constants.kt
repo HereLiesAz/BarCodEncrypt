@@ -16,5 +16,6 @@ object Constants {
         const val ENCRYPTED_TEXT = "com.hereliesaz.barcodencrypt.ENCRYPTED_TEXT"
         const val CORRECT_KEY = "com.hereliesaz.barcodencrypt.CORRECT_KEY"
         const val BOUNDS = "com.hereliesaz.barcodencrypt.BOUNDS"
+        const val TUTORIAL_BARCODE = "com.hereliesaz.barcodencrypt.TUTORIAL_BARCODE"
     }
 }
