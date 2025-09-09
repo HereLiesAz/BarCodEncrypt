@@ -1,7 +1,6 @@
 package com.hereliesaz.barcodencrypt.ui
 
 import android.content.ComponentName
-import android.content.Context // Added for SharedPreferences
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -21,7 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner // Changed
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -63,8 +62,7 @@ class SettingsActivity : ComponentActivity() {
                     },
                     onNavigateToTryMe = {
                         com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
-                        // Corrected to TryItActivity if that's the intended navigation for "Try Me"
-                        startActivity(Intent(this, TryItActivity::class.java).apply {
+                        startActivity(Intent(this, ScannerActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
@@ -72,35 +70,6 @@ class SettingsActivity : ComponentActivity() {
                         SettingsScreen(viewModel)
                     }
                 )
-            }
-        }
-    }
-
-    companion object {
-        private const val PREFS_NAME = "AssociatedAppsPrefs"
-        private const val KEY_ASSOCIATED_APPS = "associated_apps"
-
-        fun loadAssociatedApps(context: Context): Set<String> {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            return prefs.getStringSet(KEY_ASSOCIATED_APPS, emptySet()) ?: emptySet()
-        }
-
-        fun saveAssociatedApps(context: Context, apps: Set<String>) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putStringSet(KEY_ASSOCIATED_APPS, apps).apply()
-        }
-
-        fun addAssociation(context: Context, packageName: String) {
-            val currentApps = loadAssociatedApps(context).toMutableSet()
-            if (currentApps.add(packageName)) {
-                saveAssociatedApps(context, currentApps)
-            }
-        }
-
-        fun deleteAssociation(context: Context, packageName: String) {
-            val currentApps = loadAssociatedApps(context).toMutableSet()
-            if (currentApps.remove(packageName)) {
-                saveAssociatedApps(context, currentApps)
             }
         }
     }
@@ -113,7 +82,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val autofillManager = remember { context.getSystemService(AutofillManager::class.java) }
     var showPasswordDialog by remember { mutableStateOf(false) }
-    //val globallyAssociatedApps by remember { derivedStateOf { SettingsActivity.loadAssociatedApps(context) } } // Example if needed in UI
 
     if (showPasswordDialog) {
         PasswordDialog(
@@ -129,10 +97,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         if (autofillManager == null || !autofillManager.hasEnabledAutofillServices()) {
             return false
         }
+        // For API P and above, check if our service is the selected one.
+        // For older APIs, hasEnabledAutofillServices() is sufficient if true.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             return autofillManager.autofillServiceComponentName == ComponentName(context, BarcodeAutofillService::class.java)
         }
-        return true
+        return true // For API O & O_MR1, if hasEnabledAutofillServices is true, we assume it's our service or user will select it.
     }
 
     var isEnabled by remember { mutableStateOf(isServiceEnabled()) }
@@ -174,10 +144,5 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         Button(onClick = { viewModel.logout() }) {
             Text("Log out")
         }
-
-        // Add UI for managing global associations if needed
-        // Text("Globally Associated Apps: ${globallyAssociatedApps.joinToString()}")
-        // Button(onClick = { SettingsActivity.addAssociation(context, "com.example.app")}) { Text("Add Example App")}
-        // Button(onClick = { SettingsActivity.deleteAssociation(context, "com.example.app")}) { Text("Remove Example App")}
     }
 }

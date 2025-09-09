@@ -88,9 +88,5 @@
     <string name="key_added">Key added.</string>
     <string name="web_client_id" translatable="false">1073139954141-i45hcf43c5flos3g7sqvqcba18903eon.apps.googleusercontent.com</string>
     <string name="try_me">Try Me</string>
-
-    <!-- Added strings for ContactDetailActivity -->
-    <string name="contact_detail_instructions">Manage the encryption keys for this contact. Use the \'+\' button to add new keys (single barcode, sequence, or password-only).</string>
-    <string name="contact_keys_description">These are the cryptographic keys assigned to this contact for encrypting and decrypting messages.</string>
 </resources>
 

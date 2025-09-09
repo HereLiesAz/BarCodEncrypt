@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         AppScaffoldWithNavRail(
-                            screenTitle = "Dashboard",
+                            screenTitle = "Barcodencrypt",
                             onNavigateToManageKeys = onManageContactKeysLambda,
                             onNavigateToCompose = {
                                 startActivity(Intent(this, ComposeActivity::class.java).apply {
@@ -144,15 +144,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onNavigateToTryMe = {
                                 com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
-                                lifecycleScope.launch {
-                                    ScannerManager.requestScan { barcode ->
-                                        if (barcode != null) {
-                                            com.hereliesaz.barcodencrypt.util.TutorialManager.onBarcodeScanned(barcode)
-                                            val intent = Intent(this@MainActivity, MockMessagesActivity::class.java)
-                                            startActivity(intent)
-                                        }
-                                    }
-                                }
+                                startActivity(Intent(this, ScannerActivity::class.java))
                             },
                             screenContent = {
                                 MainScreen(

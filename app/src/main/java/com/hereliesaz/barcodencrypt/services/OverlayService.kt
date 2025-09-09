@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
-import android.widget.Toast // Added for tutorial feedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,7 +44,6 @@ import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import com.hereliesaz.barcodencrypt.util.ScannerManager
-import com.hereliesaz.barcodencrypt.util.TutorialManager // Import TutorialManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -91,13 +89,19 @@ class OverlayService : Service() {
                 }
 
                 barcodeName = MessageParser.getBarcodeNameFromMessage(encryptedText!!)
-                if (TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
-                    // Removed TutorialManager.showTutorialDialog call
-                    // The overlay itself implies interaction. Activity should guide.
-                    Toast.makeText(this, "Tutorial: Tap the highlighted message to decrypt.", Toast.LENGTH_LONG).show()
+                if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
+                    com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                        this,
+                        "Tutorial: Step 2",
+                        "Now, tap the highlighted text to decrypt the message."
+                    ) {
+                        overlayState.value = OverlayState.Initial
+                        createOverlay(bounds)
+                    }
+                } else {
+                    overlayState.value = OverlayState.Initial
+                    createOverlay(bounds)
                 }
-                overlayState.value = OverlayState.Initial
-                createOverlay(bounds)
             }
             ACTION_SHOW_PASSWORD_ICON -> {
                 val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -126,19 +130,23 @@ class OverlayService : Service() {
             return
         }
 
-        if (TutorialManager.isTutorialRunning() && bName == "tutorial_key") {
+        if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && bName == "tutorial_key") {
             val decrypted = EncryptionManager.decrypt(fullEncryptedText, scannedKey)
             if (decrypted != null) {
-                // Removed TutorialManager.showTutorialDialog call
-                Toast.makeText(this, "Tutorial Complete! You decrypted the message.", Toast.LENGTH_LONG).show()
-                TutorialManager.stopTutorial()
-                removeOverlay()
-                stopSelf()
-                overlayState.value = OverlayState.Success(decrypted.plaintext) // Update state before returning
+                com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                    this,
+                    "Tutorial Complete!",
+                    "You have successfully decrypted the message."
+                ) {
+                    com.hereliesaz.barcodencrypt.util.TutorialManager.stopTutorial()
+                    removeOverlay()
+                    stopSelf()
+                }
+                overlayState.value = OverlayState.Success(decrypted)
             } else {
                 overlayState.value = OverlayState.Failure
             }
-            return // Important to return after handling tutorial case
+            return
         }
 
         serviceScope.launch(Dispatchers.IO) {
@@ -190,14 +198,16 @@ class OverlayService : Service() {
 
             withContext(Dispatchers.Main) {
                 if (decrypted != null) {
-                    if (TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
-                        // This block is now redundant due to changes in handleScannedKey for tutorial flow
-                        // Retaining for safety but should be hit only if flow is different.
-                        Toast.makeText(this@OverlayService, "Tutorial Complete! Message decrypted.", Toast.LENGTH_LONG).show()
-                        TutorialManager.stopTutorial()
-                        removeOverlay()
-                        stopSelf()
-                        // No need to set overlayState.value again if already handled in handleScannedKey
+                    if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning() && barcodeName == "tutorial_key") {
+                        com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                            this@OverlayService,
+                            "Tutorial Complete!",
+                            "You have successfully decrypted the message."
+                        ) {
+                            com.hereliesaz.barcodencrypt.util.TutorialManager.stopTutorial()
+                            removeOverlay()
+                            stopSelf()
+                        }
                     } else {
                         val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
                         val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
@@ -209,7 +219,7 @@ class OverlayService : Service() {
                             ttlInSeconds = (ttlHours * 3600).toLong()
                         }
 
-                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
+                        overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
 
                         if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                             val messageHash = EncryptionManager.sha256(fullEncryptedText)

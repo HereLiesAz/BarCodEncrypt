@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -33,7 +34,6 @@ import com.hereliesaz.barcodencrypt.viewmodel.ContactDetailViewModelFactory
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity
-import com.hereliesaz.barcodencrypt.ui.TryItActivity // Added import
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 
 sealed class KeyCreationState {
@@ -101,6 +101,8 @@ class ContactDetailActivity : ComponentActivity() {
 
         setContent {
             BarcodencryptTheme {
+                var showAssociationDialog by remember { mutableStateOf(false) }
+
                 AppScaffoldWithNavRail(
                     screenTitle = contactName!!,
                     navigationIcon = {
@@ -115,7 +117,7 @@ class ContactDetailActivity : ComponentActivity() {
                     },
                     onNavigateToTryMe = {
                         com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
-                        startActivity(Intent(this, TryItActivity::class.java).apply { 
+                        startActivity(Intent(this, ScannerActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         })
                     },
@@ -131,7 +133,7 @@ class ContactDetailActivity : ComponentActivity() {
                     },
                     floatingActionButton = {
                         FloatingActionButton(onClick = {
-                            keyCreationState = KeyCreationState.Idle 
+                            keyCreationState = KeyCreationState.Idle
                         }) {
                             Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_barcode_content_description))
                         }
@@ -146,13 +148,32 @@ class ContactDetailActivity : ComponentActivity() {
                                 scanSequenceLauncher = scanSequenceLauncher
                             )
                         }
+
+                        if (showAssociationDialog) {
+                            AddAssociationDialog(
+                                onDismiss = { showAssociationDialog = false },
+                                onConfirm = { packageName ->
+                                    viewModel.addAssociation(packageName)
+                                    showAssociationDialog = false
+                                },
+                                installedApps = getInstalledApps()
+                            )
+                        }
+
                         ContactDetailScreen(
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            onAddAssociation = { showAssociationDialog = true }
                         )
                     }
                 )
             }
         }
+    }
+
+    private fun getInstalledApps(): List<String> {
+        val pm = packageManager
+        val packages = pm.getInstalledApplications(0)
+        return packages.map { it.packageName }.sorted()
     }
 }
 
@@ -283,6 +304,53 @@ fun KeyCreationDialog(
 }
 
 @Composable
+fun AddAssociationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    installedApps: List<String>
+) {
+    var selectedApp by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Associate App") },
+        text = {
+            LazyColumn {
+                items(installedApps) { app ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedApp = app }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedApp == app,
+                            onClick = { selectedApp = app }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(app)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedApp) },
+                enabled = selectedApp.isNotEmpty()
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 fun KeyTypeSelectionDialog(
     onDismiss: () -> Unit,
     onKeyTypeSelected: (com.hereliesaz.barcodencrypt.data.KeyType) -> Unit
@@ -325,27 +393,57 @@ fun KeyTypeSelectionDialog(
 
 @Composable
 fun ContactDetailScreen(
-    viewModel: ContactDetailViewModel
+    viewModel: ContactDetailViewModel,
+    onAddAssociation: () -> Unit
 ) {
     val barcodes by viewModel.barcodes.observeAsState(emptyList())
+    val associations by viewModel.associations.observeAsState(emptyList())
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            text = stringResource(R.string.contact_detail_instructions),
+            text = "Add keys for this contact by scanning barcodes. Then, associate messaging apps with this contact so Barcodencrypt knows which keys to use for which app.",
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(bottom = 16.dp)
         )
         Text("Keys", style = MaterialTheme.typography.headlineMedium)
-        Text(stringResource(R.string.contact_keys_description), style = MaterialTheme.typography.bodySmall)
+        Text("These are the keys you can use to send encrypted messages to this contact.", style = MaterialTheme.typography.bodySmall)
         Spacer(modifier = Modifier.height(8.dp))
         if (barcodes.isEmpty()) {
             Text(stringResource(id = R.string.no_barcodes_assigned))
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) { 
+            LazyColumn(modifier = Modifier.height(200.dp)) {
                 items(barcodes) { barcode ->
                     BarcodeItem(barcode = barcode)
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Associated Apps", style = MaterialTheme.typography.headlineMedium)
+        Text("When you are in one of these apps, Barcodencrypt will use this contact's keys to decrypt messages.", style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(8.dp))
+        if (associations.isEmpty()) {
+            Text("No apps associated with this contact.")
+        } else {
+            LazyColumn(modifier = Modifier.height(200.dp)) {
+                items(associations) { association ->
+                    ListItem(
+                        headlineContent = { Text(association.packageName) },
+                        trailingContent = {
+                            IconButton(onClick = { viewModel.deleteAssociation(association.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Association")
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onAddAssociation) {
+            Text("Add App Association")
         }
     }
 }

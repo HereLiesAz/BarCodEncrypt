@@ -1,11 +1,7 @@
 package com.hereliesaz.barcodencrypt.util
 
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext // Added import
-// import androidx.compose.ui.res.stringResource // Commented out as we try LocalContext
+import android.content.Context
+import androidx.appcompat.app.AlertDialog
 
 object TutorialManager {
     var barcode: String? = null
@@ -20,33 +16,25 @@ object TutorialManager {
         tutorialState = TutorialState.NOT_STARTED
     }
 
-    fun onBarcodeScanned(barcodeValue: String) {
-        this.barcode = barcodeValue
+    fun onBarcodeScanned(barcode: String) {
+        this.barcode = barcode
         tutorialState = TutorialState.DECRYPTING_MESSAGE
     }
 
     fun isTutorialRunning(): Boolean {
         return tutorialState != TutorialState.NOT_STARTED
     }
-}
 
-@Composable
-fun TutorialPromptDialog(
-    title: String,
-    message: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current // Get context
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = title) },
-        text = { Text(text = message) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = context.getString(android.R.string.ok)) // Use context.getString
+    fun showTutorialDialog(context: Context, title: String, message: String, onDismiss: () -> Unit = {}) {
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok) { dialog, _ ->
+                dialog.dismiss()
+                onDismiss()
             }
-        }
-    )
+            .show()
+    }
 }
 
 enum class TutorialState {

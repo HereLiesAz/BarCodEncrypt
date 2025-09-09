@@ -17,7 +17,6 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column // Added for wrapping content and dialog
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -30,48 +29,50 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.LocalLifecycleOwner // Changed
+import androidx.compose.ui.res.stringResource // Added for stringResource call
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import com.hereliesaz.barcodencrypt.R
-import com.hereliesaz.barcodencrypt.MainActivity
+import com.hereliesaz.barcodencrypt.R // Added
+import com.hereliesaz.barcodencrypt.MainActivity // Added
+// ComposeActivity and SettingsActivity are used in AppScaffoldWithNavRail lambdas
 import com.hereliesaz.barcodencrypt.ui.ComposeActivity
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity
-import com.hereliesaz.barcodencrypt.ui.TryItActivity // Crucial import
-import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
+import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail // Added
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.TutorialManager // Crucial import
-import com.hereliesaz.barcodencrypt.util.TutorialPromptDialog // Crucial import
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class ScannerActivity : ComponentActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
-    private var showTutorialDialogState by mutableStateOf(false)
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 setupCamera()
             } else {
-                Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_LONG).show() // Changed to string resource
                 finish()
             }
         }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        if (TutorialManager.isTutorialRunning()) {
-            showTutorialDialogState = true
+        if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning()) {
+            com.hereliesaz.barcodencrypt.util.TutorialManager.showTutorialDialog(
+                this,
+                "Tutorial: Step 1",
+                "Scan any barcode. This will be your secret key."
+            )
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -84,65 +85,49 @@ class ScannerActivity : ComponentActivity() {
     private fun setupCamera() {
         setContent {
             BarcodencryptTheme {
-                // Column to host both AppScaffold and potentially the Dialog
-                Column {
-                    AppScaffoldWithNavRail(
-                        screenTitle = "Scan Barcode",
-                        onNavigateToManageKeys = {
-                            startActivity(Intent(this@ScannerActivity, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
-                            finish()
-                        },
-                        onNavigateToTryMe = {
-                            startActivity(Intent(this@ScannerActivity, TryItActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
-                            finish()
-                        },
-                        onNavigateToCompose = {
-                            startActivity(Intent(this@ScannerActivity, ComposeActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
-                            finish()
-                        },
-                        onNavigateToSettings = {
-                            startActivity(Intent(this@ScannerActivity, SettingsActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
-                            finish()
-                        },
-                        screenContent = {
-                            // ScannerScreen fills the available space from AppScaffoldWithNavRail
-                            ScannerScreen(
-                                onBarcodeFound = { barcodeValue ->
-                                    if (isFinishing || isDestroyed) return@ScannerScreen
-                                    if (TutorialManager.isTutorialRunning()) {
-                                        TutorialManager.onBarcodeScanned(barcodeValue)
-                                        Toast.makeText(this@ScannerActivity, "Tutorial: Key Scanned! Proceed to next step.", Toast.LENGTH_LONG).show()
-                                        // Potentially navigate to a MockMessagesActivity or similar for tutorial flow
-                                        // Example: startActivity(Intent(this@ScannerActivity, MockMessagesActivity::class.java))
-                                        finish()
-                                    } else {
-                                        val resultIntent = Intent().apply {
-                                            putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
-                                        }
-                                        setResult(Activity.RESULT_OK, resultIntent)
-                                        finish()
+                AppScaffoldWithNavRail(
+                    screenTitle = getString(R.string.scan_key),
+                    onNavigateToManageKeys = {
+                        startActivity(Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                        finish()
+                    },
+                    onNavigateToTryMe = {},
+                    onNavigateToCompose = {
+                        startActivity(Intent(this, ComposeActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                        finish()
+                    },
+                    onNavigateToSettings = {
+                        startActivity(Intent(this, SettingsActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        })
+                        finish()
+                    },
+                    screenContent = {
+                        ScannerScreen(
+                            onBarcodeFound = { barcodeValue ->
+                                if (isFinishing || isDestroyed) return@ScannerScreen
+                                if (com.hereliesaz.barcodencrypt.util.TutorialManager.isTutorialRunning()) {
+                                    com.hereliesaz.barcodencrypt.util.TutorialManager.onBarcodeScanned(barcodeValue)
+                                    val intent = Intent(this, MockMessagesActivity::class.java).apply {
+                                        putExtra(Constants.IntentKeys.TUTORIAL_BARCODE, barcodeValue)
                                     }
+                                    startActivity(intent)
+                                    finish()
+                                } else {
+                                    val resultIntent = Intent().apply {
+                                        putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
+                                    }
+                                    setResult(Activity.RESULT_OK, resultIntent)
+                                    finish()
                                 }
-                            )
-                        }
-                    )
-                    // Show dialog if state is true, it will overlay on top
-                    if (showTutorialDialogState) {
-                        TutorialPromptDialog(
-                            title = "Tutorial: Step 1",
-                            message = "Scan any barcode. This will be your secret key.",
-                            onDismiss = { showTutorialDialogState = false }
+                            }
                         )
                     }
-                }
+                )
             }
         }
     }
@@ -195,9 +180,9 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
         Text(
-            text = stringResource(id = R.string.point_camera_at_a_barcode),
+            text = stringResource(id = R.string.point_camera_at_a_barcode), // Changed to stringResource
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onPrimary, // Consider if onPrimary is suitable with NavRail theme
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(32.dp)
@@ -207,35 +192,23 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
 
 private class BarcodeAnalyzer(private val listener: (String) -> Unit) : ImageAnalysis.Analyzer {
     private val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().build())
-    private var isScannerClosed = false
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
-        if (isScannerClosed) {
-            imageProxy.close()
-            return
-        }
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             scanner.process(image)
                 .addOnSuccessListener { barcodes ->
-                    if (isScannerClosed) return@addOnSuccessListener
                     for (barcode in barcodes) {
                         barcode.rawValue?.let {
-                            if (!isScannerClosed) {
-                                listener(it)
-                                scanner.close()
-                                isScannerClosed = true
-                            }
+                            listener(it)
                             return@addOnSuccessListener
                         }
                     }
                 }
                 .addOnFailureListener { e -> Log.e("BarcodeAnalyzer", "Analysis failed.", e) }
                 .addOnCompleteListener { imageProxy.close() }
-        } else {
-            imageProxy.close()
         }
     }
 }
