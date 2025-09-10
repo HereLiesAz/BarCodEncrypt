@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewTreeLifecycleOwner
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.Barcode
@@ -58,6 +59,7 @@ class OverlayService : Service() {
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val lifecycleOwner = ServiceLifecycleOwner()
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var encryptedText: String? = null
     private var barcodeName: String? = null
@@ -259,6 +261,7 @@ class OverlayService : Service() {
         )
 
         composeView = ComposeView(this).apply {
+            ViewTreeLifecycleOwner.set(this, lifecycleOwner)
             setContent {
                 BarcodencryptTheme {
                     OverlayContent(
@@ -316,6 +319,7 @@ class OverlayService : Service() {
         super.onDestroy()
         removeOverlay()
         serviceScope.cancel()
+        lifecycleOwner.destroy()
     }
 
     companion object {
