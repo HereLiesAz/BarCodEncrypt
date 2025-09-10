@@ -34,7 +34,8 @@ class MessageDetectionService : AccessibilityService() {
             globallyAssociatedApps = applicationContext?.let { SettingsActivity.Companion.loadAssociatedApps(it) } ?: emptySet()
         }
 
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && globallyAssociatedApps.contains(currentPackageName)) {
+        val isOwnApp = packageName == currentPackageName
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && (isOwnApp || globallyAssociatedApps.contains(currentPackageName))) {
             val sourceNode = event.source ?: return
             findEncryptedMessages(sourceNode)
         } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
