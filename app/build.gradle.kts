@@ -1,12 +1,13 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 android {
     namespace = "com.hereliesaz.barcodencrypt"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hereliesaz.barcodencrypt"
@@ -53,7 +54,7 @@ android {
 dependencies {
     // Core Android & Kotlin
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3") // REVERTED to 2.8.3
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
@@ -72,10 +73,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-common-java8:2.8.3")
     implementation("androidx.lifecycle:lifecycle-service:2.8.3")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
+    implementation("androidx.compose.runtime:runtime-livedata:1.6.8")
+
 
     // Room for Database
     implementation("androidx.room:room-runtime:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
 
     // CameraX for QR Code Scanning
@@ -93,6 +96,17 @@ dependencies {
 
     // Gson for JSON processing
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // Tink for Crypto
+    implementation("com.google.crypto.tink:tink-android:1.11.0")
+
+    // Credentials
+    implementation("androidx.credentials:credentials:1.2.2")
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
+
+    // AzNavRail
+    implementation("com.github.HereLiesAz:AzNavRail:2.7")
+
 
     // Testing
     testImplementation("junit:junit:4.13.2")

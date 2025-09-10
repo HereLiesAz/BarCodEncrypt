@@ -8,14 +8,27 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 
+import com.hereliesaz.barcodencrypt.services.OverlayService
+
 class PasswordScannerTrampolineActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_IS_FOR_DECRYPTION = "is_for_decryption"
+    }
 
     private val scanResultLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
                 val scannedValue = result.data?.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
-                if (scannedValue != null) {
-                    PasswordPasteManager.paste(scannedValue)
+                if (intent.getBooleanExtra(EXTRA_IS_FOR_DECRYPTION, false)) {
+                    val intent = Intent(OverlayService.ACTION_SCAN_RESULT).apply {
+                        putExtra(Constants.IntentKeys.SCAN_RESULT, scannedValue)
+                    }
+                    sendBroadcast(intent)
+                } else {
+                    if (scannedValue != null) {
+                        PasswordPasteManager.paste(scannedValue)
+                    }
                 }
             }
             // The trampoline has served its purpose. It vanishes.

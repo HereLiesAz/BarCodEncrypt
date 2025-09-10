@@ -58,6 +58,11 @@
             android:name=".ui.PasswordScannerTrampolineActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- A trampoline for the decryption scanner -->
+        <activity
+            android:name=".ui.ScannerTrampolineActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- ADDED SettingsActivity -->
         <activity
             android:name=".ui.SettingsActivity"

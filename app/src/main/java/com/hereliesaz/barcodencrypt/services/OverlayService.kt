@@ -46,7 +46,9 @@ import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
-import com.hereliesaz.barcodencrypt.util.ScannerManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,6 +68,7 @@ class OverlayService : Service() {
     private var encryptedText: String? = null
     private var barcodeName: String? = null
     private val scannedSequence = mutableListOf<String>()
+    private var scanReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,6 +79,16 @@ class OverlayService : Service() {
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
         lifecycleOwner.performRestore(null) // Initialize SavedStateRegistryController
         lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_CREATE)
+
+        scanReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == ACTION_SCAN_RESULT) {
+                    val scannedValue = intent.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
+                    handleScannedKey(scannedValue)
+                }
+            }
+        }
+        registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -277,20 +290,18 @@ class OverlayService : Service() {
                             when (overlayState.value) {
                                 is OverlayState.PasswordIcon -> handlePasswordScan()
                                 is OverlayState.SequenceRequired -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            if (result != null) {
-                                                scannedSequence.add(result)
-                                            }
-                                        }
+                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
+                                    startActivity(intent)
                                 }
                                 else -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            handleScannedKey(result)
-                                        }
+                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
+                                    startActivity(intent)
                                 }
                             }
                         },
@@ -322,6 +333,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(scanReceiver)
         lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         serviceScope.cancel()
@@ -332,6 +344,7 @@ class OverlayService : Service() {
         const val TAG = "OverlayService"
         const val ACTION_DECRYPT_MESSAGE = "com.hereliesaz.barcodencrypt.ACTION_DECRYPT_MESSAGE"
         const val ACTION_SHOW_PASSWORD_ICON = "com.hereliesaz.barcodencrypt.ACTION_SHOW_PASSWORD_ICON"
+        const val ACTION_SCAN_RESULT = "com.hereliesaz.barcodencrypt.ACTION_SCAN_RESULT"
     }
 }
 
