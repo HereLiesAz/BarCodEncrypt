@@ -34,7 +34,8 @@ class MessageDetectionService : AccessibilityService() {
             globallyAssociatedApps = applicationContext?.let { SettingsActivity.Companion.loadAssociatedApps(it) } ?: emptySet()
         }
 
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && globallyAssociatedApps.contains(currentPackageName)) {
+        val isOwnApp = packageName == currentPackageName
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && (isOwnApp || globallyAssociatedApps.contains(currentPackageName))) {
             val sourceNode = event.source ?: return
             findEncryptedMessages(sourceNode)
         } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
@@ -53,10 +54,11 @@ class MessageDetectionService : AccessibilityService() {
         val text = nodeInfo.text?.toString()
         if (text.isNullOrBlank()) return
 
+        val v4Regex = "~BCEv4~[A-Za-z0-9+/=]+".toRegex()
         val v3Regex = "~BCE~[A-Za-z0-9+/=]+".toRegex()
         val v1v2Regex = "BCE::v[12]::.*?::.*?::(?:\\d+::)?[A-Za-z0-9+/=\\s]+".toRegex()
 
-        val allMatches = v3Regex.findAll(text) + v1v2Regex.findAll(text)
+        val allMatches = v4Regex.findAll(text) + v3Regex.findAll(text) + v1v2Regex.findAll(text)
 
         allMatches.forEach { matchResult ->
             val fullMatch = matchResult.value
