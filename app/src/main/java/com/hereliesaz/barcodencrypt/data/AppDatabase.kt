@@ -53,7 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "barcodencrypt_database"
                 )
                 .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // Added MIGRATION_5_6
-                .fallbackToDestructiveMigration(true) // Kept for safety, though explicit migrations are preferred
+                .fallbackToDestructiveMigration() // Kept for safety, though explicit migrations are preferred
                 .build()
                 INSTANCE = instance
                 instance

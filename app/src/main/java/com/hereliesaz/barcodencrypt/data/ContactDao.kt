@@ -7,10 +7,10 @@ import androidx.room.*
 interface ContactDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertContact(contact: Contact)
+    suspend fun insertContact(contact: Contact): Long
 
     @Delete
-    suspend fun deleteContact(contact: Contact)
+    suspend fun deleteContact(contact: Contact): Int
 
     @Transaction
     @Query("SELECT * FROM contacts")

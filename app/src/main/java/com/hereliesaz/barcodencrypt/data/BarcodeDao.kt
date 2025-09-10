@@ -17,7 +17,7 @@ import androidx.room.Update
 interface BarcodeDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertBarcode(barcode: Barcode)
+    suspend fun insertBarcode(barcode: Barcode): Long
 
     @Query("SELECT * FROM barcodes WHERE name = :name LIMIT 1")
     suspend fun getBarcodeByName(name: String): Barcode?
@@ -35,17 +35,17 @@ interface BarcodeDao {
     fun getBarcodesForContactRaw(contactLookupKey: String): LiveData<List<Barcode>>
 
     @Delete
-    suspend fun deleteBarcode(barcode: Barcode)
+    suspend fun deleteBarcode(barcode: Barcode): Int
 
     @Update
-    suspend fun updateBarcode(barcode: Barcode)
+    suspend fun updateBarcode(barcode: Barcode): Int
 
     @Query("SELECT * FROM barcodes WHERE id = :barcodeId")
     suspend fun getBarcode(barcodeId: Int): Barcode?
 
     @Query("UPDATE barcodes SET counter = counter + 1 WHERE id = :barcodeId")
-    suspend fun incrementCounter(barcodeId: Int)
+    suspend fun incrementCounter(barcodeId: Int): Int
 
     @Query("UPDATE barcodes SET counter = 0 WHERE id = :barcodeId")
-    suspend fun resetCounter(barcodeId: Int)
+    suspend fun resetCounter(barcodeId: Int): Int
 }
