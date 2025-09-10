@@ -1,6 +1,7 @@
 package com.hereliesaz.barcodencrypt.ui
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -20,7 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner // Changed
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -70,6 +71,32 @@ class SettingsActivity : ComponentActivity() {
                         SettingsScreen(viewModel)
                     }
                 )
+            }
+        }
+    }
+
+    companion object {
+        private const val ASSOCIATIONS_PREFS_NAME = "app_settings_associations"
+        private const val ASSOCIATED_PACKAGE_NAMES_KEY = "associated_package_names"
+
+        fun loadAssociatedApps(context: Context): Set<String> {
+            val prefs = context.getSharedPreferences(ASSOCIATIONS_PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getStringSet(ASSOCIATED_PACKAGE_NAMES_KEY, emptySet()) ?: emptySet()
+        }
+
+        fun addAssociatedApp(context: Context, packageName: String) {
+            val prefs = context.getSharedPreferences(ASSOCIATIONS_PREFS_NAME, Context.MODE_PRIVATE)
+            val currentApps = loadAssociatedApps(context).toMutableSet()
+            if (currentApps.add(packageName)) {
+                prefs.edit().putStringSet(ASSOCIATED_PACKAGE_NAMES_KEY, currentApps).apply()
+            }
+        }
+
+        fun removeAssociatedApp(context: Context, packageName: String) {
+            val prefs = context.getSharedPreferences(ASSOCIATIONS_PREFS_NAME, Context.MODE_PRIVATE)
+            val currentApps = loadAssociatedApps(context).toMutableSet()
+            if (currentApps.remove(packageName)) {
+                prefs.edit().putStringSet(ASSOCIATED_PACKAGE_NAMES_KEY, currentApps).apply()
             }
         }
     }

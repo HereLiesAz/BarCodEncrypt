@@ -46,6 +46,15 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true // Example, ensure this block exists or is created
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
+
 }
 
 dependencies {
@@ -89,9 +98,9 @@ dependencies {
 
 
     testImplementation(libs.junit)
-    testImplementation("org.mockito:mockito-core:4.8.0")
-    testImplementation("org.mockito:mockito-inline:4.8.0")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
+    testImplementation("org.mockito:mockito-core:5.19.0")
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:6.0.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom)) // Updated Compose BOM

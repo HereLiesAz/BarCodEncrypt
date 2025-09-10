@@ -142,7 +142,7 @@ class OverlayService : Service() {
                     removeOverlay()
                     stopSelf()
                 }
-                overlayState.value = OverlayState.Success(decrypted)
+                overlayState.value = OverlayState.Success(decrypted.plaintext) // MODIFIED
             } else {
                 overlayState.value = OverlayState.Failure
             }
@@ -208,6 +208,8 @@ class OverlayService : Service() {
                             removeOverlay()
                             stopSelf()
                         }
+                        // Assuming the tutorial success does not set overlayState.value directly with DecryptedMessage object.
+                        // The primary error is pointed at the non-tutorial path by the compiler.
                     } else {
                         val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
                         val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
@@ -219,7 +221,7 @@ class OverlayService : Service() {
                             ttlInSeconds = (ttlHours * 3600).toLong()
                         }
 
-                        overlayState.value = OverlayState.Success(decrypted, ttlInSeconds)
+                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds) // MODIFIED
 
                         if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                             val messageHash = EncryptionManager.sha256(fullEncryptedText)
