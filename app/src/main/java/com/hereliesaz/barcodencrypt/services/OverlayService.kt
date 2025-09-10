@@ -31,6 +31,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.lifecycle.setViewTreeSavedStateRegistryOwner // ADDED import
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.Barcode
@@ -43,7 +46,9 @@ import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.util.Constants
 import com.hereliesaz.barcodencrypt.util.MessageParser
 import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
-import com.hereliesaz.barcodencrypt.util.ScannerManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,10 +63,12 @@ class OverlayService : Service() {
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val lifecycleOwner = ServiceLifecycleOwner()
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var encryptedText: String? = null
     private var barcodeName: String? = null
     private val scannedSequence = mutableListOf<String>()
+    private var scanReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,9 +77,22 @@ class OverlayService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
+        lifecycleOwner.performRestore(null) // Initialize SavedStateRegistryController
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_CREATE)
+
+        scanReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == ACTION_SCAN_RESULT) {
+                    val scannedValue = intent.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
+                    handleScannedKey(scannedValue)
+                }
+            }
+        }
+        registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
         when (intent?.action) {
             ACTION_DECRYPT_MESSAGE -> {
                 encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
@@ -142,7 +162,7 @@ class OverlayService : Service() {
                     removeOverlay()
                     stopSelf()
                 }
-                overlayState.value = OverlayState.Success(decrypted.plaintext) // MODIFIED
+                overlayState.value = OverlayState.Success(decrypted.plaintext)
             } else {
                 overlayState.value = OverlayState.Failure
             }
@@ -208,8 +228,6 @@ class OverlayService : Service() {
                             removeOverlay()
                             stopSelf()
                         }
-                        // Assuming the tutorial success does not set overlayState.value directly with DecryptedMessage object.
-                        // The primary error is pointed at the non-tutorial path by the compiler.
                     } else {
                         val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
                         val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
@@ -221,7 +239,7 @@ class OverlayService : Service() {
                             ttlInSeconds = (ttlHours * 3600).toLong()
                         }
 
-                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds) // MODIFIED
+                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
 
                         if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                             val messageHash = EncryptionManager.sha256(fullEncryptedText)
@@ -259,6 +277,9 @@ class OverlayService : Service() {
         )
 
         composeView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeViewModelStoreOwner(lifecycleOwner)
+            setViewTreeSavedStateRegistryOwner(lifecycleOwner) // ADDED line
             setContent {
                 BarcodencryptTheme {
                     OverlayContent(
@@ -269,20 +290,18 @@ class OverlayService : Service() {
                             when (overlayState.value) {
                                 is OverlayState.PasswordIcon -> handlePasswordScan()
                                 is OverlayState.SequenceRequired -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            if (result != null) {
-                                                scannedSequence.add(result)
-                                            }
-                                        }
+                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
+                                    startActivity(intent)
                                 }
                                 else -> {
-                                    serviceScope.launch {
-                                        ScannerManager.requestScan { result ->
-                                            handleScannedKey(result)
-                                        }
+                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
+                                    startActivity(intent)
                                 }
                             }
                         },
@@ -314,14 +333,18 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(scanReceiver)
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         serviceScope.cancel()
+        // lifecycleOwner.destroy() // Already handled by handleLifecycleEvent
     }
 
     companion object {
         const val TAG = "OverlayService"
         const val ACTION_DECRYPT_MESSAGE = "com.hereliesaz.barcodencrypt.ACTION_DECRYPT_MESSAGE"
         const val ACTION_SHOW_PASSWORD_ICON = "com.hereliesaz.barcodencrypt.ACTION_SHOW_PASSWORD_ICON"
+        const val ACTION_SCAN_RESULT = "com.hereliesaz.barcodencrypt.ACTION_SCAN_RESULT"
     }
 }
 
