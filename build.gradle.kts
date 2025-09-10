@@ -6,3 +6,4 @@ plugins {
     id("com.google.devtools.ksp") version "2.2.10-2.0.2" apply false
 
 }
+val targetCompatibility by extra(JavaVersion.VERSION_17)

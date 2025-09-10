@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BarCodEncrypt"
+rootProject.name = "BarCodeNcrypt"
 include(":app")
  

@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.playservices.auth.GoogleIdTokenCredential // Added import
 import androidx.lifecycle.lifecycleScope
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
@@ -37,14 +38,14 @@ class OnboardingActivity : ComponentActivity() {
                 try {
                     val result = credentialManager.getCredential(this@OnboardingActivity, request)
                     onboardingViewModel.handleSignInResult(result)
-                } catch (e: androidx.credentials.exceptions.GetCredentialException) {
+                } catch (e: GetCredentialException) {
                     Log.e("OnboardingActivity", "GetCredentialException", e)
                 }
             }
         }
 
         lifecycleScope.launch {
-            onboardingViewModel.signInResult.collect { credential ->
+            onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? -> // Specified type
                 if (credential != null) {
                     onboardingViewModel.onGoogleSignInSuccess()
                     startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))

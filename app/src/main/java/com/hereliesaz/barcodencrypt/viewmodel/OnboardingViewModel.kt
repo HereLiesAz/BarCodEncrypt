@@ -7,16 +7,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.barcodencrypt.util.AuthManager
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow // Added import
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
 
     private val _signInRequest = MutableSharedFlow<GetCredentialRequest>()
-    val signInRequest = _signInRequest.asSharedFlow()
+    val signInRequest: SharedFlow<GetCredentialRequest> = _signInRequest.asSharedFlow() // Explicit type
 
     private val _signInResult = MutableSharedFlow<GoogleIdTokenCredential?>()
-    val signInResult = _signInResult.asSharedFlow()
+    val signInResult: SharedFlow<GoogleIdTokenCredential?> = _signInResult.asSharedFlow() // Explicit type
 
     fun onSignInWithGoogleClicked() {
         viewModelScope.launch {
