@@ -279,7 +279,6 @@ class OverlayService : Service() {
         composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeViewModelStoreOwner(lifecycleOwner)
-            setViewTreeSavedStateRegistryOwner(lifecycleOwner) // ADDED line
             setContent {
                 BarcodencryptTheme {
                     OverlayContent(
@@ -337,7 +336,6 @@ class OverlayService : Service() {
         lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         serviceScope.cancel()
-        // lifecycleOwner.destroy() // Already handled by handleLifecycleEvent
     }
 
     companion object {
