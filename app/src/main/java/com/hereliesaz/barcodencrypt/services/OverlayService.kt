@@ -31,7 +31,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.lifecycle.setViewTreeSavedStateRegistryOwner // ADDED import
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.Barcode
@@ -72,9 +74,12 @@ class OverlayService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
+        lifecycleOwner.performRestore(null) // Initialize SavedStateRegistryController
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_CREATE)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
         when (intent?.action) {
             ACTION_DECRYPT_MESSAGE -> {
                 encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
@@ -144,7 +149,7 @@ class OverlayService : Service() {
                     removeOverlay()
                     stopSelf()
                 }
-                overlayState.value = OverlayState.Success(decrypted.plaintext) // MODIFIED
+                overlayState.value = OverlayState.Success(decrypted.plaintext)
             } else {
                 overlayState.value = OverlayState.Failure
             }
@@ -210,8 +215,6 @@ class OverlayService : Service() {
                             removeOverlay()
                             stopSelf()
                         }
-                        // Assuming the tutorial success does not set overlayState.value directly with DecryptedMessage object.
-                        // The primary error is pointed at the non-tutorial path by the compiler.
                     } else {
                         val options = fullEncryptedText.split("::").getOrNull(2) ?: ""
                         val ttlHoursString = options.split(',').find { it.startsWith("ttl_hours=") }
@@ -223,7 +226,7 @@ class OverlayService : Service() {
                             ttlInSeconds = (ttlHours * 3600).toLong()
                         }
 
-                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds) // MODIFIED
+                        overlayState.value = OverlayState.Success(decrypted.plaintext, ttlInSeconds)
 
                         if (options.contains(EncryptionManager.OPTION_SINGLE_USE)) {
                             val messageHash = EncryptionManager.sha256(fullEncryptedText)
@@ -261,7 +264,9 @@ class OverlayService : Service() {
         )
 
         composeView = ComposeView(this).apply {
-            ViewTreeLifecycleOwner.set(this, lifecycleOwner)
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeViewModelStoreOwner(lifecycleOwner)
+            setViewTreeSavedStateRegistryOwner(lifecycleOwner) // ADDED line
             setContent {
                 BarcodencryptTheme {
                     OverlayContent(
@@ -317,9 +322,10 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         serviceScope.cancel()
-        lifecycleOwner.destroy()
+        // lifecycleOwner.destroy() // Already handled by handleLifecycleEvent
     }
 
     companion object {

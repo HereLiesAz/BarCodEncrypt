@@ -1,23 +1,19 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
-    id("org.jetbrains.kotlin.plugin.compose")
+    id("kotlin-kapt")
 }
 
 android {
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     namespace = "com.hereliesaz.barcodencrypt"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.hereliesaz.barcodencrypt"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 5
-        versionName = "0.7.2"
+        targetSdk = 34
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -28,83 +24,82 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
-
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
     buildFeatures {
         compose = true
-        viewBinding = true // Enabled View Binding
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-
-    testOptions {
-        unitTests {
-            isReturnDefaultValues = true // Example, ensure this block exists or is created
-            kotlinOptions {
-                jvmTarget = "17"
-            }
-        }
-    }
-
 }
 
 dependencies {
+    // Core Android & Kotlin
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3") // REVERTED to 2.8.3
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core:1.6.8")
+    implementation("androidx.compose.material:material-icons-extended:1.6.8")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.livedata.ktx)
-    implementation(libs.androidx.compose.runtime.livedata)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom)) // Updated Compose BOM
-    implementation(libs.androidx.runtime.livedata) // Added LiveData-Compose integration
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.material3)
-    implementation(libs.material)
-    implementation(libs.androidx.constraintlayout)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.aznavrail)
+    // Lifecycle, ViewModel, LiveData
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-common-java8:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-service:2.8.3")
+    implementation("androidx.savedstate:savedstate-ktx:1.2.1")
 
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
+    // Room for Database
+    implementation("androidx.room:room-runtime:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
 
-    implementation(libs.barcode.scanning)
+    // CameraX for QR Code Scanning
+    val cameraxVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:${cameraxVersion}")
+    implementation("androidx.camera:camera-camera2:${cameraxVersion}")
+    implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
+    implementation("androidx.camera:camera-view:${cameraxVersion}")
 
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.gson)
-    ksp(libs.androidx.room.compiler)
+    // ML Kit for Barcode Scanning
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
-    // Google Sign-In
-    implementation("androidx.credentials:credentials:1.5.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-    implementation("com.google.crypto.tink:tink-android:1.11.0")
+    // ZXing for QR Code generation (Consider replacing with a more modern library if issues arise)
+    implementation("com.google.zxing:core:3.5.3")
 
+    // Gson for JSON processing
+    implementation("com.google.code.gson:gson:2.10.1")
 
-
-    testImplementation(libs.junit)
-    testImplementation("org.mockito:mockito-core:5.19.0")
-    testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:6.0.0")
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom)) // Updated Compose BOM
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
