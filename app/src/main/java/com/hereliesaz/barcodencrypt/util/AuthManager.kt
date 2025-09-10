@@ -10,9 +10,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
+import androidx.credentials.playservices.auth.*
 import com.hereliesaz.barcodencrypt.R
 import java.nio.charset.Charset
 import java.security.KeyStore
@@ -78,14 +76,11 @@ class AuthManager(
 
     suspend fun handleSignInResult(result: GetCredentialResponse): GoogleIdTokenCredential? {
         val credential = result.credential
-        if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-            try {
-                return GoogleIdTokenCredential.createFrom(credential.data)
-            } catch (e: GoogleIdTokenParsingException) {
-                // Handle exception
-            }
+        return if (credential is GoogleIdTokenCredential) {
+            credential
+        } else {
+            null
         }
-        return null
     }
 
     private fun generateNonce(): String {

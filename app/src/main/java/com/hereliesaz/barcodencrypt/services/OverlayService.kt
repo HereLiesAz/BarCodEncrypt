@@ -31,9 +31,11 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.lifecycle.setViewTreeSavedStateRegistryOwner // ADDED import
+import androidx.lifecycle.*
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.hereliesaz.barcodencrypt.crypto.EncryptionManager
 import com.hereliesaz.barcodencrypt.data.AppDatabase
 import com.hereliesaz.barcodencrypt.data.Barcode
@@ -57,28 +59,40 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class OverlayService : Service() {
+class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private lateinit var revokedMessageRepository: RevokedMessageRepository
     private var composeView: ComposeView? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val lifecycleOwner = ServiceLifecycleOwner()
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var encryptedText: String? = null
     private var barcodeName: String? = null
     private val scannedSequence = mutableListOf<String>()
     private var scanReceiver: BroadcastReceiver? = null
 
+    // Lifecycle and SavedStateRegistry properties
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+    private val store = ViewModelStore()
+
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
+    override val viewModelStore: ViewModelStore
+        get() = store
+    override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        savedStateRegistryController.performRestore(null)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val database = AppDatabase.getDatabase(application)
         revokedMessageRepository = RevokedMessageRepository(database.revokedMessageDao())
-        lifecycleOwner.performRestore(null) // Initialize SavedStateRegistryController
-        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_CREATE)
 
         scanReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -88,11 +102,15 @@ class OverlayService : Service() {
                 }
             }
         }
-        registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT), RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT))
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         when (intent?.action) {
             ACTION_DECRYPT_MESSAGE -> {
                 encryptedText = intent.getStringExtra(Constants.IntentKeys.ENCRYPTED_TEXT)
@@ -277,8 +295,9 @@ class OverlayService : Service() {
         )
 
         composeView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeViewModelStoreOwner(lifecycleOwner)
+            setViewTreeLifecycleOwner(this@OverlayService)
+            setViewTreeViewModelStoreOwner(this@OverlayService)
+            setViewTreeSavedStateRegistryOwner(this@OverlayService)
             setContent {
                 BarcodencryptTheme {
                     OverlayContent(
@@ -288,15 +307,8 @@ class OverlayService : Service() {
                         onClick = {
                             when (overlayState.value) {
                                 is OverlayState.PasswordIcon -> handlePasswordScan()
-                                is OverlayState.SequenceRequired -> {
-                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
-                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    startActivity(intent)
-                                }
                                 else -> {
-                                    val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+                                    val intent = Intent(this@OverlayService, PasswordScannerTrampolineActivity::class.java).apply {
                                         putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
@@ -332,8 +344,8 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         unregisterReceiver(scanReceiver)
-        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
         removeOverlay()
         serviceScope.cancel()
     }
@@ -363,6 +375,7 @@ fun OverlayContent(
     onClick: () -> Unit,
     onFinish: () -> Unit
 ) {
+    val context = LocalContext.current
     var visible by remember { mutableStateOf(true) }
     var countdown by remember { mutableStateOf<Long?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -374,7 +387,7 @@ fun OverlayContent(
                     countdown = state.ttl
                     while (countdown!! > 0) {
                         delay(1000)
-                        countdown = countdown!! - 1
+                        countdown = (countdown ?: 0) - 1
                     }
                     visible = false
                     onFinish()
@@ -401,92 +414,77 @@ fun OverlayContent(
     }
 
     if (visible) {
-        if (state is OverlayState.SequenceRequired) {
-            val context = LocalContext.current
-            LaunchedEffect(scannedSequence.size) {
-                if (barcodeName != null) {
-                    coroutineScope.launch(Dispatchers.IO) {
-                        val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(context).barcodeDao())
-                        val barcode = barcodeRepository.getBarcodeByName(barcodeName)
-                        if (barcode?.barcodeSequence?.size == scannedSequence.size) {
-                            withContext(Dispatchers.Main) {
-                                state.onSequence(scannedSequence.toList())
+        when (state) {
+            is OverlayState.PasswordRequired -> {
+                PasswordDialog(
+                    onDismiss = { onFinish() },
+                    onConfirm = { password ->
+                        state.onPassword(password)
+                    }
+                )
+            }
+            is OverlayState.SequenceRequired -> {
+                var requiredSequenceSize by remember { mutableStateOf(0) }
+                LaunchedEffect(Unit) {
+                    val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(context).barcodeDao())
+                    val barcode = barcodeRepository.getBarcodeByName(barcodeName!!)
+                    requiredSequenceSize = barcode?.barcodeSequence?.size ?: 0
+                }
+                Text("Scan barcode ${scannedSequence.size + 1} of $requiredSequenceSize", color = Color.White)
+            }
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .clickable(enabled = state is OverlayState.Initial || state is OverlayState.PasswordIcon, onClick = onClick)
+                        .border(2.dp, if (state is OverlayState.Failure) DisabledRed else Color.Yellow.copy(alpha = 0.7f))
+                        .background(
+                            when (state) {
+                                is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
+                                is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
+                                is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
+                                is OverlayState.PasswordIcon -> Color.White.copy(alpha = 0.2f)
+                                else -> Color.Transparent
                             }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    when (state) {
+                        is OverlayState.Initial -> {
+                            Text(
+                                "Tap to Decrypt",
+                                color = Color.White
+                            )
                         }
-                    }
-                }
-            }
-        }
-
-        if (state is OverlayState.PasswordRequired) {
-            PasswordDialog(
-                onDismiss = { onFinish() },
-                onConfirm = { password ->
-                    state.onPassword(password)
-                }
-            )
-        } else if (state is OverlayState.SequenceRequired) {
-            val context = LocalContext.current
-            var requiredSequenceSize by remember { mutableStateOf(0) }
-            LaunchedEffect(Unit) {
-                val barcodeRepository = BarcodeRepository(AppDatabase.getDatabase(context).barcodeDao())
-                val barcode = barcodeRepository.getBarcodeByName(barcodeName!!)
-                requiredSequenceSize = barcode?.barcodeSequence?.size ?: 0
-            }
-            Text("Scan barcode ${scannedSequence.size + 1} of $requiredSequenceSize", color = Color.White)
-        } else {
-            Box(
-                modifier = Modifier
-                    .clickable(enabled = state is OverlayState.Initial, onClick = onClick)
-                    .border(2.dp, if (state is OverlayState.Failure) DisabledRed else Color.Yellow.copy(alpha = 0.7f))
-                    .background(
-                        when (state) {
-                            is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
-                            is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
-                            is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
-                            is OverlayState.PasswordIcon -> Color.White.copy(alpha = 0.2f)
-                            else -> Color.Transparent
+                        is OverlayState.Success -> {
+                            val text = if (countdown != null) {
+                                "${state.plaintext}\n(Vanishes in $countdown...)"
+                            } else {
+                                state.plaintext
+                            }
+                            Text(
+                                text,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
                         }
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                when (state) {
-                    is OverlayState.Initial -> {
-                        Text(
-                            "Tap to Decrypt",
-                            color = Color.White
-                        )
-                    }
-                    is OverlayState.Success -> {
-                        val text = if (countdown != null) {
-                            "${state.plaintext}\n(Vanishes in $countdown...)"
-                        } else {
-                            state.plaintext
+                        is OverlayState.Failure -> {
+                            Text(
+                                "Incorrect Key",
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
                         }
-                        Text(
-                            text,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
+                        is OverlayState.PasswordIcon -> {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan Barcode for Password",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(48.dp)
+                            )
+                        }
+                        else -> {}
                     }
-                    is OverlayState.Failure -> {
-                        Text(
-                            "Incorrect Key",
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    is OverlayState.PasswordIcon -> {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan Barcode for Password",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clickable(onClick = onClick)
-                        )
-                    }
-                    else -> {}
                 }
             }
         }
