@@ -10,8 +10,9 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
-import androidx.credentials.playservices.auth.GetGoogleIdOption
-import androidx.credentials.playservices.auth.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.hereliesaz.barcodencrypt.R
 import java.nio.charset.Charset
 import java.security.KeyStore
@@ -77,22 +78,25 @@ class AuthManager(
 
     suspend fun handleSignInResult(result: GetCredentialResponse): GoogleIdTokenCredential? {
         val credential = result.credential
-        return if (credential is GoogleIdTokenCredential) {
-            credential
-        } else {
-            null
+        if (credential is CustomCredential) {
+            if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                try {
+                    return GoogleIdTokenCredential.createFrom(credential.data)
+                } catch (e: GoogleIdTokenParsingException) {
+                    // Log error
+                    return null
+                }
+            }
         }
+        return null
     }
 
     private fun generateNonce(): String {
         val random = SecureRandom()
         val bytes = ByteArray(16)
         random.nextBytes(bytes)
-        return bytes.toHexString()
+        return bytes.joinToString("") { "%02x".format(it) }
     }
-
-    @OptIn(ExperimentalUnsignedTypes::class)
-    private fun ByteArray.toHexString() = asUByteArray().joinToString("") { it.toString(16).padStart(2, '0') }
 
 
     fun setPassword(password: String) {

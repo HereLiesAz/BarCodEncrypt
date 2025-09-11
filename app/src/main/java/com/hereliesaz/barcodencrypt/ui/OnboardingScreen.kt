@@ -43,9 +43,9 @@ fun OnboardingScreen(
     ) {
         Text("Welcome to Barcodencrypt")
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = { onboardingViewModel.onSignInWithGoogleClicked() }) {
-            Text("Sign in with Google")
-        }
+//        Button(onClick = { onboardingViewModel.onSignInWithGoogleClicked() }) {
+//            Text("Sign in with Google")
+//        }
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = { showPasswordDialog = true }) {
             Text("Set a password")
