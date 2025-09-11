@@ -8,9 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
-import androidx.credentials.playservices.auth.GoogleIdTokenCredential // Added import
+import androidx.credentials.playservices.auth.GoogleIdTokenCredential
 import androidx.lifecycle.lifecycleScope
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.viewmodel.OnboardingViewModel
