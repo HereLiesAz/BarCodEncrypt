@@ -15,17 +15,6 @@ object EncryptionManager {
     const val OPTION_TTL_HOURS_PREFIX = "ttl_hours="
     const val OPTION_TTL_ON_OPEN_TRUE = "ttl_on_open=true"
 
-
-    data class DecryptedMessage(
-        val plaintext: String,
-        val keyName: String,
-        val counter: Long,
-        val maxAttempts: Int,
-        val singleUse: Boolean,
-        val ttlHours: Int?,
-        val ttlOnOpen: Boolean
-    )
-
     private const val KEY_DERIVATION_ALGORITHM = "SHA-256"
     private const val HEADER_PREFIX_V4 = "~BCEv4~"
     private const val HKDF_MAC_ALGORITHM = "HMACSHA256" // Corresponds to Tink's PrfHmacSha256
@@ -81,7 +70,7 @@ object EncryptionManager {
             val associatedData = createAssociatedData(keyName, counter, options, maxAttempts)
             val ciphertext = aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), associatedData)
 
-            val message = TinkMessage(
+            val message = com.hereliesaz.barcodencrypt.crypto.model.TinkMessage(
                 salt = salt,
                 ciphertext = ciphertext,
                 keyName = keyName,
@@ -98,21 +87,8 @@ object EncryptionManager {
         }
     }
 
-    internal fun parseMessage(ciphertext: String): TinkMessage? {
-        if (!ciphertext.startsWith(HEADER_PREFIX_V4)) {
-            return null
-        }
-        return try {
-            val json = String(Base64.decode(ciphertext.removePrefix(HEADER_PREFIX_V4), Base64.NO_WRAP), StandardCharsets.UTF_8)
-            val gson = Gson()
-            gson.fromJson(json, TinkMessage::class.java)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    fun decrypt(ciphertext: String, ikm: String): DecryptedMessage? {
-        val message = parseMessage(ciphertext)
+    fun decrypt(ciphertext: String, ikm: String): com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage? {
+        val message = com.hereliesaz.barcodencrypt.util.MessageParser.parseV4Message(ciphertext)
         return if (message != null) {
             decryptMessage(message, ikm)
         } else {
@@ -120,7 +96,7 @@ object EncryptionManager {
         }
     }
 
-    private fun decryptMessage(message: TinkMessage, ikm: String): DecryptedMessage? {
+    private fun decryptMessage(message: com.hereliesaz.barcodencrypt.crypto.model.TinkMessage, ikm: String): com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage? {
         return try {
             // Derive encryption key using HKDF with the message's salt
             val derivedKeyBytes = Hkdf.computeHkdf(
@@ -142,7 +118,7 @@ object EncryptionManager {
             val ttlHoursString = message.options.find { it.startsWith(OPTION_TTL_HOURS_PREFIX) }
             val ttlHours = ttlHoursString?.removePrefix(OPTION_TTL_HOURS_PREFIX)?.toIntOrNull()
 
-            DecryptedMessage(
+            com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage(
                 plaintext = plaintext,
                 keyName = message.keyName,
                 counter = message.counter,
@@ -169,12 +145,4 @@ object EncryptionManager {
     }
 
     // Made internal to be accessible from other modules like OverlayService
-    internal data class TinkMessage(
-        val salt: ByteArray,
-        val ciphertext: ByteArray,
-        val keyName: String,
-        val counter: Long,
-        val options: List<String>,
-        val maxAttempts: Int
-    )
 }
