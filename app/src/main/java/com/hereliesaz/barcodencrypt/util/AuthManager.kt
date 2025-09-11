@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -84,6 +85,7 @@ class AuthManager(
                 auth.signInWithCredential(firebaseCredential).await()
                 credential
             } catch (e: Exception) {
+                Log.e("AuthManager", "Firebase sign-in failed", e)
                 null
             }
         }
