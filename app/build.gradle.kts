@@ -3,11 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.hereliesaz.barcodencrypt"
-    compileSdkPreview = "CANARY"
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hereliesaz.barcodencrypt"
@@ -42,16 +43,11 @@ android {
         compose = true
         dataBinding = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-    buildToolsVersion = "36.1.0 rc1"
-    ndkVersion = "29.0.13599879 rc2"
 }
 
 dependencies {
@@ -81,7 +77,6 @@ dependencies {
 
     // Room for Database
     implementation("androidx.room:room-runtime:2.6.1")
-    implementation(libs.googleid)
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
 
@@ -105,8 +100,8 @@ dependencies {
     implementation("com.google.crypto.tink:tink-android:1.11.0")
 
     // Credentials
-    implementation("androidx.credentials:credentials:1.2.2")
-    implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
 
     // AzNavRail
     implementation("com.github.HereLiesAz:AzNavRail:2.7")
