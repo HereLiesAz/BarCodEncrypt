@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -29,6 +30,7 @@ class AuthManager(
     private val context: Context,
     private val sharedPreferences: SharedPreferences
 ) {
+    // Re-committing to trigger a new build for the user.
 
     private val credentialManager = CredentialManager.create(context)
     private val auth: FirebaseAuth = Firebase.auth
@@ -60,7 +62,10 @@ class AuthManager(
     }
 
     fun isLoggedIn(): Boolean {
-        return sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY) || (auth.currentUser != null)
+        val hasLocalPassword = sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY)
+        val hasFirebaseUser = auth.currentUser != null
+        Log.d("AuthManager", "isLoggedIn: hasLocalPassword=$hasLocalPassword, hasFirebaseUser=$hasFirebaseUser")
+        return hasLocalPassword || hasFirebaseUser
     }
 
     fun getGoogleSignInRequest(): GetCredentialRequest {
@@ -81,9 +86,15 @@ class AuthManager(
             val googleIdToken = credential.idToken
             val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
             return try {
-                auth.signInWithCredential(firebaseCredential).await()
-                credential
+                val authResult = auth.signInWithCredential(firebaseCredential).await()
+                if (authResult.user != null) {
+                    credential
+                } else {
+                    Log.e("AuthManager", "Firebase sign-in failed: authResult.user is null")
+                    null
+                }
             } catch (e: Exception) {
+                Log.e("AuthManager", "Firebase sign-in failed with exception", e)
                 null
             }
         }

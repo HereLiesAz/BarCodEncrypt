@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.provider.ContactsContract
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -76,15 +77,23 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.d("MainActivity", "onCreate")
+        setTheme(R.style.Theme_Barcodencrypt)
         super.onCreate(savedInstanceState)
 
-        viewModel.checkLoginStatus()
-
-        viewModel.isLoggedIn.observe(this) { isLoggedIn ->
-            if (isLoggedIn == false) {
-                startActivity(Intent(this, OnboardingActivity::class.java))
-                finish()
-                return@observe
+        val fromOnboarding = intent.getBooleanExtra("FROM_ONBOARDING", false)
+        Log.d("MainActivity", "fromOnboarding: $fromOnboarding")
+        if (!fromOnboarding) {
+            Log.d("MainActivity", "Checking login status")
+            viewModel.checkLoginStatus()
+            viewModel.isLoggedIn.observe(this) { isLoggedIn ->
+                Log.d("MainActivity", "isLoggedIn observer: $isLoggedIn")
+                if (isLoggedIn == false) {
+                    Log.d("MainActivity", "Redirecting to OnboardingActivity")
+                    startActivity(Intent(this, OnboardingActivity::class.java))
+                    finish()
+                    return@observe
+                }
             }
         }
 
