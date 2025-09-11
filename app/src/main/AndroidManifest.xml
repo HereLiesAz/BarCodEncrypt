@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- Permission for the Poltergeist to manifest. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!-- Permission for services to run in the foreground -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
 
     <application
@@ -81,7 +83,8 @@
         <service
             android:name=".services.MessageDetectionService"
             android:exported="false"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:foregroundServiceType="specialUse">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
@@ -93,7 +96,8 @@
         <!-- The Poltergeist's heart. -->
         <service
             android:name=".services.OverlayService"
-            android:exported="false"/>
+            android:exported="false"
+            android:foregroundServiceType="specialUse"/>
 
         <activity
             android:name=".ui.MockMessagesActivity"
