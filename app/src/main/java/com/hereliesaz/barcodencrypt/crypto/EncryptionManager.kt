@@ -1,6 +1,10 @@
 package com.hereliesaz.barcodencrypt.crypto
 
-import com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage
+import android.util.Base64
+import com.google.crypto.tink.Aead
+import com.google.crypto.tink.subtle.AesGcmJce
+import com.google.crypto.tink.subtle.Hkdf
+import com.google.gson.Gson
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
@@ -13,8 +17,8 @@ object EncryptionManager {
 
     private const val KEY_DERIVATION_ALGORITHM = "SHA-256"
     private const val HEADER_PREFIX_V4 = "~BCEv4~"
-
-    // --- Public Helper Functions ---
+    private const val HKDF_MAC_ALGORITHM = "HMACSHA256" // Corresponds to Tink's PrfHmacSha256
+    private const val DERIVED_KEY_SIZE_BYTES = 32 // For AES-256
 
     fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance(KEY_DERIVATION_ALGORITHM)
@@ -40,8 +44,6 @@ object EncryptionManager {
         }
     }
 
-    // --- Encryption/Decryption Facade ---
-
     fun encrypt(
         plaintext: String,
         ikm: String,
@@ -50,32 +52,97 @@ object EncryptionManager {
         options: List<String> = emptyList(),
         maxAttempts: Int = 0
     ): String? {
-        // For now, we only support v4. In the future, this could select a scheme based on a global setting.
-        return HkdfAesGcmScheme.encrypt(plaintext, ikm, keyName, counter, options, maxAttempts)
-    }
+        return try {
+            val salt = ByteArray(16) // Standard salt size for HKDF
+            java.security.SecureRandom().nextBytes(salt)
 
-    fun decrypt(ciphertext: String, ikm: String): DecryptedMessage? {
-        // Peek at the header to decide which scheme to use
-        return when {
-            ciphertext.startsWith(HEADER_PREFIX_V4) -> HkdfAesGcmScheme.decrypt(ciphertext, ikm)
+            // Derive encryption key using HKDF
+            val derivedKeyBytes = Hkdf.computeHkdf(
+                HKDF_MAC_ALGORITHM,
+                ikm.toByteArray(StandardCharsets.UTF_8),
+                salt,
+                null, // No specific "info" field for now
+                DERIVED_KEY_SIZE_BYTES
+            )
 
-            /**
-             * The 'v3' roadmap mentioned in the README is now unblocked because the Tink
-             * dependency provides the necessary primitives (like X25519) for advanced
-             * protocols like a Double Ratchet.
-             *
-             * To implement a new scheme (e.g., "v5"), you would:
-             * 1. Create a new class `DoubleRatchetScheme : CryptoScheme`.
-             * 2. Implement the `encrypt` and `decrypt` methods using Tink's Hybrid
-             *    Encryption/Decryption or other necessary primitives.
-             * 3. Add a new header prefix constant, e.g., `HEADER_PREFIX_V5 = "~BCEv5~"`.
-             * 4. Add the new case to this `when` block:
-             *
-             *    ciphertext.startsWith(HEADER_PREFIX_V5) -> DoubleRatchetScheme.decrypt(ciphertext, ikm)
-             *
-             * This structure allows for multiple cryptographic schemes to coexist.
-             */
-            else -> null
+            val aead: Aead = AesGcmJce(derivedKeyBytes)
+
+            val associatedData = createAssociatedData(keyName, counter, options, maxAttempts)
+            val ciphertext = aead.encrypt(plaintext.toByteArray(StandardCharsets.UTF_8), associatedData)
+
+            val message = com.hereliesaz.barcodencrypt.crypto.model.TinkMessage(
+                salt = salt,
+                ciphertext = ciphertext,
+                keyName = keyName,
+                counter = counter,
+                options = options,
+                maxAttempts = maxAttempts
+            )
+            val gson = Gson()
+            val json = gson.toJson(message)
+            HEADER_PREFIX_V4 + Base64.encodeToString(json.toByteArray(StandardCharsets.UTF_8), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
+
+    fun decrypt(ciphertext: String, ikm: String): com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage? {
+        val message = com.hereliesaz.barcodencrypt.util.MessageParser.parseV4Message(ciphertext)
+        return if (message != null) {
+            decryptMessage(message, ikm)
+        } else {
+            null
+        }
+    }
+
+    private fun decryptMessage(message: com.hereliesaz.barcodencrypt.crypto.model.TinkMessage, ikm: String): com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage? {
+        return try {
+            // Derive encryption key using HKDF with the message's salt
+            val derivedKeyBytes = Hkdf.computeHkdf(
+                HKDF_MAC_ALGORITHM,
+                ikm.toByteArray(StandardCharsets.UTF_8),
+                message.salt,
+                null, // Must match encryption if "info" was used
+                DERIVED_KEY_SIZE_BYTES
+            )
+
+            val aead: Aead = AesGcmJce(derivedKeyBytes)
+
+            val associatedData = createAssociatedData(message.keyName, message.counter, message.options, message.maxAttempts)
+            val decrypted = aead.decrypt(message.ciphertext, associatedData)
+            val plaintext = String(decrypted, StandardCharsets.UTF_8)
+
+            val singleUse = message.options.contains(OPTION_SINGLE_USE)
+            val ttlOnOpen = message.options.contains(OPTION_TTL_ON_OPEN_TRUE)
+            val ttlHoursString = message.options.find { it.startsWith(OPTION_TTL_HOURS_PREFIX) }
+            val ttlHours = ttlHoursString?.removePrefix(OPTION_TTL_HOURS_PREFIX)?.toIntOrNull()
+
+            com.hereliesaz.barcodencrypt.crypto.model.DecryptedMessage(
+                plaintext = plaintext,
+                keyName = message.keyName,
+                counter = message.counter,
+                maxAttempts = message.maxAttempts,
+                singleUse = singleUse,
+                ttlHours = ttlHours,
+                ttlOnOpen = ttlOnOpen
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun createAssociatedData(keyName: String, counter: Long, options: List<String>, maxAttempts: Int): ByteArray {
+        val gson = Gson()
+        val data = mapOf(
+            "keyName" to keyName,
+            "counter" to counter,
+            "options" to options,
+            "maxAttempts" to maxAttempts
+        )
+        return gson.toJson(data).toByteArray(StandardCharsets.UTF_8)
+    }
+
+    // Made internal to be accessible from other modules like OverlayService
 }

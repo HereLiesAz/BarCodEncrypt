@@ -11,7 +11,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.hereliesaz.barcodencrypt.data.*
 import com.hereliesaz.barcodencrypt.ui.SettingsActivity // Import for accessing SharedPreferences
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -42,13 +41,9 @@ class MessageDetectionService : AccessibilityService() {
         } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
             val sourceNode = event.source ?: return
             if (sourceNode.isPassword) {
-                val fieldId = sourceNode.viewIdResourceName
-                if (fieldId != null) {
-                    PasswordPasteManager.prepareForPaste(sourceNode)
-                    val bounds = Rect()
-                    sourceNode.getBoundsInScreen(bounds)
-                    summonPasswordOverlay(bounds, fieldId)
-                }
+                val bounds = Rect()
+                sourceNode.getBoundsInScreen(bounds)
+                summonPasswordOverlay(bounds)
             }
         }
     }
@@ -104,7 +99,7 @@ class MessageDetectionService : AccessibilityService() {
         startService(intent)
     }
 
-    private fun summonPasswordOverlay(bounds: Rect, fieldId: String) {
+    private fun summonPasswordOverlay(bounds: Rect) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot summon overlay: permission not granted.")
             return
@@ -113,7 +108,6 @@ class MessageDetectionService : AccessibilityService() {
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_SHOW_PASSWORD_ICON
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
-            putExtra(Constants.IntentKeys.PASSWORD_FIELD_ID, fieldId)
         }
         startService(intent)
     }

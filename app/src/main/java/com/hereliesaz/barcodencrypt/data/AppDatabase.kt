@@ -13,14 +13,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * It no longer knows of 'Contacts', only of the sigils ('Barcodes') themselves.
  * It is a singleton, a lonely and singular vault of secrets.
  */
-@Database(entities = [Contact::class, Barcode::class, RevokedMessage::class, PasswordEntry::class], version = 7, exportSchema = false)
+@Database(entities = [Contact::class, Barcode::class, RevokedMessage::class], version = 6, exportSchema = false) // Removed AppContactAssociation, Incremented version
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao
     abstract fun barcodeDao(): BarcodeDao
     abstract fun revokedMessageDao(): RevokedMessageDao
-    abstract fun passwordEntryDao(): PasswordEntryDao
+    // abstract fun appContactAssociationDao(): AppContactAssociationDao // Removed
 
     companion object {
         @Volatile
@@ -39,25 +39,9 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
+        private val MIGRATION_5_6 = object : Migration(5, 6) { // New Migration
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("DROP TABLE IF EXISTS app_contact_associations")
-            }
-        }
-
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `password_entries` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `name` TEXT NOT NULL,
-                        `encrypted_password` BLOB NOT NULL,
-                        `iv` BLOB NOT NULL,
-                        `unlock_barcode_value` TEXT NOT NULL,
-                        `created_at` INTEGER NOT NULL
-                    )
-                """)
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_password_entries_name` ON `password_entries` (`name`)")
+                db.execSQL("DROP TABLE IF EXISTS app_contact_associations") // Table name for AppContactAssociation
             }
         }
 
@@ -68,8 +52,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "barcodencrypt_database"
                 )
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // Added MIGRATION_5_6
+                .fallbackToDestructiveMigration() // Kept for safety, though explicit migrations are preferred
                 .build()
                 INSTANCE = instance
                 instance
