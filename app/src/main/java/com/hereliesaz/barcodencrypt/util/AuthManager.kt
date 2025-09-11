@@ -82,10 +82,15 @@ class AuthManager(
             val googleIdToken = credential.idToken
             val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
             return try {
-                auth.signInWithCredential(firebaseCredential).await()
-                credential
+                val authResult = auth.signInWithCredential(firebaseCredential).await()
+                if (authResult.user != null) {
+                    credential
+                } else {
+                    Log.e("AuthManager", "Firebase sign-in failed: authResult.user is null")
+                    null
+                }
             } catch (e: Exception) {
-                Log.e("AuthManager", "Firebase sign-in failed", e)
+                Log.e("AuthManager", "Firebase sign-in failed with exception", e)
                 null
             }
         }
