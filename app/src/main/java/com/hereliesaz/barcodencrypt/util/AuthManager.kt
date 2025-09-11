@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -81,9 +82,15 @@ class AuthManager(
             val googleIdToken = credential.idToken
             val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
             return try {
-                auth.signInWithCredential(firebaseCredential).await()
-                credential
+                val authResult = auth.signInWithCredential(firebaseCredential).await()
+                if (authResult.user != null) {
+                    credential
+                } else {
+                    Log.e("AuthManager", "Firebase sign-in failed: authResult.user is null")
+                    null
+                }
             } catch (e: Exception) {
+                Log.e("AuthManager", "Firebase sign-in failed with exception", e)
                 null
             }
         }
