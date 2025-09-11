@@ -28,7 +28,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Barcodencrypt"
         android:enableOnBackInvokedCallback="true"
-        tools:targetApi="31">
+        tools:targetApi="33">
 
         <activity
             android:name=".MainActivity"
@@ -43,7 +43,6 @@
         <!-- The Ritual Chamber for scanning. -->
         <activity
             android:name=".ui.ScannerActivity"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.Barcodencrypt" />
 
         <!-- The Alchemist's Workshop. -->
@@ -65,17 +64,13 @@
 
         <!-- A trampoline for the decryption scanner -->
         <activity
-            android:name=".ui.ScannerTrampolineActivity"
+            android:name=".ui.AutofillScannerTrampolineActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- ADDED SettingsActivity -->
         <activity
             android:name=".ui.SettingsActivity"
             android:label="Settings"
-            android:theme="@style/Theme.Barcodencrypt" />
-
-        <activity
-            android:name=".ui.PasswordAssistantActivity"
             android:theme="@style/Theme.Barcodencrypt" />
 
         <activity
@@ -87,7 +82,8 @@
             android:name=".services.MessageDetectionService"
             android:exported="false"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse"
+            tools:ignore="AccessibilityPolicy">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>

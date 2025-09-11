@@ -13,7 +13,7 @@ android {
     defaultConfig {
         applicationId = "com.hereliesaz.barcodencrypt"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 33
         versionCode = 2
         versionName = "1.1"
 
@@ -36,8 +36,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        jvmToolchain(17)
     }
     buildFeatures {
         compose = true
@@ -80,6 +80,7 @@ dependencies {
     // Room for Database
     implementation(libs.androidx.room.runtime)
     implementation(libs.googleid)
+    // implementation(libs.firebase.auth) // <- Removed this line
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
 

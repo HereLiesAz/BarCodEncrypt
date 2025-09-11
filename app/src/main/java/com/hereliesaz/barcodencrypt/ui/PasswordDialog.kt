@@ -20,7 +20,7 @@ fun PasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set Password") },
+        title = { Text("Enter Password") },
         text = {
             OutlinedTextField(
                 value = password,
