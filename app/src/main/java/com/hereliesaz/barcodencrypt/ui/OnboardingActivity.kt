@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.playservices.auth.GoogleIdTokenCredential // Added import
 import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.MainActivity
@@ -45,7 +46,7 @@ class OnboardingActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            onboardingViewModel.signInResult.collect { credential ->
+            onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? -> // Specified type
                 if (credential != null) {
                     onboardingViewModel.onGoogleSignInSuccess()
                     startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))

@@ -1,6 +1,5 @@
 package com.hereliesaz.barcodencrypt.crypto.model
 
-// Made internal to be accessible from other modules like OverlayService
 internal data class TinkMessage(
     val salt: ByteArray,
     val ciphertext: ByteArray,

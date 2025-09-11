@@ -2,7 +2,7 @@ package com.hereliesaz.barcodencrypt.viewmodel
 
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import androidx.credentials.playservices.auth.GoogleIdTokenCredential
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.barcodencrypt.util.AuthManager

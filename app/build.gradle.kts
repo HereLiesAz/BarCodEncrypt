@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.hereliesaz.barcodencrypt"
-    compileSdk = 36
+    compileSdkPreview = "CANARY"
 
     defaultConfig {
         applicationId = "com.hereliesaz.barcodencrypt"
@@ -50,12 +50,13 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    buildToolsVersion = "36.1.0 rc1"
+    ndkVersion = "29.0.13599879 rc2"
 }
 
 dependencies {
     // Core Android & Kotlin
     implementation("androidx.core:core-ktx:1.17.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.3")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))

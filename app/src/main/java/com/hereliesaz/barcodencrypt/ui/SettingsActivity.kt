@@ -16,9 +16,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -149,6 +153,30 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(16.dp)) {
+
+        val prefs = remember { context.getSharedPreferences(com.hereliesaz.barcodencrypt.util.Constants.Prefs.PREFS_NAME, Context.MODE_PRIVATE) }
+        val passwordAssistanceEnabled by remember {
+            mutableStateOf(prefs.getBoolean(com.hereliesaz.barcodencrypt.util.Constants.Prefs.PREF_PASSWORD_ASSISTANCE_ENABLED, true))
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Show Password Assistance Icon")
+            Switch(
+                checked = passwordAssistanceEnabled,
+                onCheckedChange = { isChecked ->
+                    prefs.edit().putBoolean(com.hereliesaz.barcodencrypt.util.Constants.Prefs.PREF_PASSWORD_ASSISTANCE_ENABLED, isChecked).apply()
+                    // Recompose to update the state
+                    (context as? SettingsActivity)?.recreate()
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(
             onClick = {
                 val intent = Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)

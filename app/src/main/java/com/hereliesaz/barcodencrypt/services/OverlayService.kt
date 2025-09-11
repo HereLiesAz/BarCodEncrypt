@@ -141,6 +141,20 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                     createOverlay(bounds)
                 }
             }
+            ACTION_SHOW_PASSWORD_ICON -> {
+                val bounds: Rect? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Constants.IntentKeys.BOUNDS, Rect::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Rect>(Constants.IntentKeys.BOUNDS)
+                }
+                if (bounds == null) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                overlayState.value = OverlayState.PasswordIcon
+                createOverlay(bounds)
+            }
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -258,6 +272,15 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         }
     }
 
+    private fun handlePasswordScan() {
+        val intent = Intent(this, PasswordScannerTrampolineActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+        removeOverlay()
+        stopSelf()
+    }
+
     private fun createOverlay(bounds: Rect) {
         removeOverlay()
 
@@ -282,11 +305,16 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                         scannedSequence = scannedSequence,
                         barcodeName = barcodeName,
                         onClick = {
-                            val intent = Intent(this@OverlayService, PasswordScannerTrampolineActivity::class.java).apply {
-                                putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            when (overlayState.value) {
+                                is OverlayState.PasswordIcon -> handlePasswordScan()
+                                else -> {
+                                    val intent = Intent(this@OverlayService, PasswordScannerTrampolineActivity::class.java).apply {
+                                        putExtra(PasswordScannerTrampolineActivity.EXTRA_IS_FOR_DECRYPTION, true)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    startActivity(intent)
+                                }
                             }
-                            startActivity(intent)
                         },
                         onFinish = {
                             removeOverlay()
@@ -325,6 +353,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     companion object {
         const val TAG = "OverlayService"
         const val ACTION_DECRYPT_MESSAGE = "com.hereliesaz.barcodencrypt.ACTION_DECRYPT_MESSAGE"
+        const val ACTION_SHOW_PASSWORD_ICON = "com.hereliesaz.barcodencrypt.ACTION_SHOW_PASSWORD_ICON"
         const val ACTION_SCAN_RESULT = "com.hereliesaz.barcodencrypt.ACTION_SCAN_RESULT"
     }
 }
@@ -333,6 +362,7 @@ sealed class OverlayState {
     object Initial : OverlayState()
     data class Success(val plaintext: String, val ttl: Long? = null) : OverlayState()
     object Failure : OverlayState()
+    object PasswordIcon : OverlayState()
     data class PasswordRequired(val onPassword: (String) -> Unit) : OverlayState()
     data class SequenceRequired(val onSequence: (List<String>) -> Unit) : OverlayState()
 }
@@ -372,6 +402,12 @@ fun OverlayContent(
                 visible = false
                 onFinish()
             }
+            is OverlayState.PasswordIcon -> {
+                delay(10000)
+                PasswordPasteManager.clear()
+                visible = false
+                onFinish()
+            }
             else -> {
             }
         }
@@ -399,13 +435,14 @@ fun OverlayContent(
             else -> {
                 Box(
                     modifier = Modifier
-                        .clickable(enabled = state is OverlayState.Initial, onClick = onClick)
+                        .clickable(enabled = state is OverlayState.Initial || state is OverlayState.PasswordIcon, onClick = onClick)
                         .border(2.dp, if (state is OverlayState.Failure) DisabledRed else Color.Yellow.copy(alpha = 0.7f))
                         .background(
                             when (state) {
                                 is OverlayState.Initial -> Color.Yellow.copy(alpha = 0.2f)
                                 is OverlayState.Success -> Color.Green.copy(alpha = 0.3f)
                                 is OverlayState.Failure -> DisabledRed.copy(alpha = 0.3f)
+                                is OverlayState.PasswordIcon -> Color.White.copy(alpha = 0.2f)
                                 else -> Color.Transparent
                             }
                         )
@@ -435,6 +472,15 @@ fun OverlayContent(
                                 "Incorrect Key",
                                 color = Color.White,
                                 textAlign = TextAlign.Center
+                            )
+                        }
+                        is OverlayState.PasswordIcon -> {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan Barcode for Password",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(48.dp)
                             )
                         }
                         else -> {}

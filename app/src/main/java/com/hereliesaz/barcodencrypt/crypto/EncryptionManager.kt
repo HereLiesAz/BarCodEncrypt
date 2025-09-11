@@ -75,7 +75,7 @@ object EncryptionManager {
              *
              * This structure allows for multiple cryptographic schemes to coexist.
              */
-            else -> null // Or attempt to decrypt with a legacy scheme if needed
+            else -> null
         }
     }
 }

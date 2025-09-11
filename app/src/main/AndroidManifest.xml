@@ -95,16 +95,6 @@
             android:name=".services.OverlayService"
             android:exported="false"/>
 
-        <!-- The modern ghost in the password machine. -->
-        <service
-            android:name=".services.BarcodeAutofillService"
-            android:exported="true"
-            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.autofill.AutofillService" />
-            </intent-filter>
-        </service>
-
         <activity
             android:name=".ui.MockMessagesActivity"
             android:label="Mock Conversation"

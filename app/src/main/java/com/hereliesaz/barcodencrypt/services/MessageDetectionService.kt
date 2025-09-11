@@ -1,6 +1,7 @@
 package com.hereliesaz.barcodencrypt.services
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Build
@@ -38,6 +39,13 @@ class MessageDetectionService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && (isOwnApp || globallyAssociatedApps.contains(currentPackageName))) {
             val sourceNode = event.source ?: return
             findEncryptedMessages(sourceNode)
+        } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+            val sourceNode = event.source ?: return
+            if (sourceNode.isPassword) {
+                val bounds = Rect()
+                sourceNode.getBoundsInScreen(bounds)
+                summonPasswordOverlay(bounds)
+            }
         }
     }
 
@@ -87,6 +95,26 @@ class MessageDetectionService : AccessibilityService() {
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_DECRYPT_MESSAGE
             putExtra(Constants.IntentKeys.ENCRYPTED_TEXT, encryptedText)
+            putExtra(Constants.IntentKeys.BOUNDS, bounds)
+        }
+        startService(intent)
+    }
+
+    private fun summonPasswordOverlay(bounds: Rect) {
+        val prefs = applicationContext.getSharedPreferences(Constants.Prefs.PREFS_NAME, Context.MODE_PRIVATE)
+        val passwordAssistanceEnabled = prefs.getBoolean(Constants.Prefs.PREF_PASSWORD_ASSISTANCE_ENABLED, true)
+
+        if (!passwordAssistanceEnabled) {
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Cannot summon overlay: permission not granted.")
+            return
+        }
+
+        val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_SHOW_PASSWORD_ICON
             putExtra(Constants.IntentKeys.BOUNDS, bounds)
         }
         startService(intent)

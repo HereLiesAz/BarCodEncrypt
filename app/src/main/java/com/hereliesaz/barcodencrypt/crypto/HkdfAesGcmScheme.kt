@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets
 internal object HkdfAesGcmScheme : CryptoScheme {
 
     private const val HEADER_PREFIX_V4 = "~BCEv4~"
-    private const val HKDF_MAC_ALGORITHM = "HMACSHA256" // Corresponds to Tink's PrfHmacSha256
-    private const val DERIVED_KEY_SIZE_BYTES = 32 // For AES-256
+    private const val HKDF_MAC_ALGORITHM = "HMACSHA256"
+    private const val DERIVED_KEY_SIZE_BYTES = 32
 
     override fun encrypt(
         plaintext: String,
@@ -24,15 +24,14 @@ internal object HkdfAesGcmScheme : CryptoScheme {
         maxAttempts: Int
     ): String? {
         return try {
-            val salt = ByteArray(16) // Standard salt size for HKDF
+            val salt = ByteArray(16)
             java.security.SecureRandom().nextBytes(salt)
 
-            // Derive encryption key using HKDF
             val derivedKeyBytes = Hkdf.computeHkdf(
                 HKDF_MAC_ALGORITHM,
                 ikm.toByteArray(StandardCharsets.UTF_8),
                 salt,
-                null, // No specific "info" field for now
+                null,
                 DERIVED_KEY_SIZE_BYTES
             )
 
@@ -82,12 +81,11 @@ internal object HkdfAesGcmScheme : CryptoScheme {
 
     private fun decryptMessage(message: TinkMessage, ikm: String): DecryptedMessage? {
         return try {
-            // Derive encryption key using HKDF with the message's salt
             val derivedKeyBytes = Hkdf.computeHkdf(
                 HKDF_MAC_ALGORITHM,
                 ikm.toByteArray(StandardCharsets.UTF_8),
                 message.salt,
-                null, // Must match encryption if "info" was used
+                null,
                 DERIVED_KEY_SIZE_BYTES
             )
 
@@ -97,10 +95,13 @@ internal object HkdfAesGcmScheme : CryptoScheme {
             val decrypted = aead.decrypt(message.ciphertext, associatedData)
             val plaintext = String(decrypted, StandardCharsets.UTF_8)
 
-            val singleUse = message.options.contains(EncryptionManager.OPTION_SINGLE_USE)
-            val ttlOnOpen = message.options.contains(EncryptionManager.OPTION_TTL_ON_OPEN_TRUE)
-            val ttlHoursString = message.options.find { it.startsWith(EncryptionManager.OPTION_TTL_HOURS_PREFIX) }
-            val ttlHours = ttlHoursString?.removePrefix(EncryptionManager.OPTION_TTL_HOURS_PREFIX)?.toIntOrNull()
+            // Note: The original code referenced EncryptionManager.OPTION_...
+            // This creates a circular dependency. For now, I will hardcode the string.
+            // A better solution would be to move the constants to a shared location.
+            val singleUse = message.options.contains("single-use")
+            val ttlOnOpen = message.options.contains("ttl_on_open=true")
+            val ttlHoursString = message.options.find { it.startsWith("ttl_hours=") }
+            val ttlHours = ttlHoursString?.removePrefix("ttl_hours=")?.toIntOrNull()
 
             DecryptedMessage(
                 plaintext = plaintext,
