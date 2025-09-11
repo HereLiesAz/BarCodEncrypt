@@ -79,13 +79,15 @@ class MainActivity : ComponentActivity() {
         setTheme(R.style.Theme_Barcodencrypt)
         super.onCreate(savedInstanceState)
 
-        viewModel.checkLoginStatus()
-
-        viewModel.isLoggedIn.observe(this) { isLoggedIn ->
-            if (isLoggedIn == false) {
-                startActivity(Intent(this, OnboardingActivity::class.java))
-                finish()
-                return@observe
+        val fromOnboarding = intent.getBooleanExtra("FROM_ONBOARDING", false)
+        if (!fromOnboarding) {
+            viewModel.checkLoginStatus()
+            viewModel.isLoggedIn.observe(this) { isLoggedIn ->
+                if (isLoggedIn == false) {
+                    startActivity(Intent(this, OnboardingActivity::class.java))
+                    finish()
+                    return@observe
+                }
             }
         }
 
