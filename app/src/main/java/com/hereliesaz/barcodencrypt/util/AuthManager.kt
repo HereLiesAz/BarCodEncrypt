@@ -7,12 +7,16 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import com.hereliesaz.barcodencrypt.R
+import kotlinx.coroutines.tasks.await
 import java.nio.charset.Charset
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -27,6 +31,7 @@ class AuthManager(
 ) {
 
     private val credentialManager = CredentialManager.create(context)
+    private val auth: FirebaseAuth = Firebase.auth
     private val webClientId by lazy {
         context.getString(R.string.web_client_id)
     }
@@ -55,15 +60,14 @@ class AuthManager(
     }
 
     fun isLoggedIn(): Boolean {
-        return sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY) || sharedPreferences.getBoolean(IS_GOOGLE_SIGNED_IN_KEY, false)
+        return sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY) || (auth.currentUser != null)
     }
 
-    suspend fun getGoogleSignInRequest(): GetCredentialRequest {
+    fun getGoogleSignInRequest(): GetCredentialRequest {
         val nonce = generateNonce()
         val googleIdOption: GetGoogleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(true)
+            .setFilterByAuthorizedAccounts(false)
             .setServerClientId(webClientId)
-            .setAutoSelectEnabled(true)
             .setNonce(nonce)
             .build()
         return GetCredentialRequest.Builder()
@@ -71,17 +75,19 @@ class AuthManager(
             .build()
     }
 
-    fun setGoogleSignInSuccess() {
-        sharedPreferences.edit().putBoolean(IS_GOOGLE_SIGNED_IN_KEY, true).apply()
-    }
-
     suspend fun handleSignInResult(result: GetCredentialResponse): GoogleIdTokenCredential? {
         val credential = result.credential
-        return if (credential is GoogleIdTokenCredential) {
-            credential
-        } else {
-            null
+        if (credential is GoogleIdTokenCredential) {
+            val googleIdToken = credential.idToken
+            val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
+            return try {
+                auth.signInWithCredential(firebaseCredential).await()
+                credential
+            } catch (e: Exception) {
+                null
+            }
         }
+        return null
     }
 
     private fun generateNonce(): String {
@@ -132,10 +138,10 @@ class AuthManager(
         } catch (e: Exception) {
             // Log error
         }
+        auth.signOut()
         sharedPreferences.edit()
             .remove(ENCRYPTED_PASSWORD_KEY)
             .remove(IV_KEY)
-            .remove(IS_GOOGLE_SIGNED_IN_KEY)
             .apply()
     }
 

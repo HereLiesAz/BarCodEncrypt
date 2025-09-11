@@ -7,22 +7,33 @@ import androidx.lifecycle.viewModelScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.util.AuthManager
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow // Added import
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
 
     private val _signInRequest = MutableSharedFlow<GetCredentialRequest>()
-    val signInRequest: SharedFlow<GetCredentialRequest> = _signInRequest.asSharedFlow() // Explicit type
+    val signInRequest: SharedFlow<GetCredentialRequest> = _signInRequest.asSharedFlow()
 
     private val _signInResult = MutableSharedFlow<GoogleIdTokenCredential?>()
-    val signInResult: SharedFlow<GoogleIdTokenCredential?> = _signInResult.asSharedFlow() // Explicit type
+    val signInResult: SharedFlow<GoogleIdTokenCredential?> = _signInResult.asSharedFlow()
+
+    private val _signInError = MutableStateFlow(false)
+    val signInError: StateFlow<Boolean> = _signInError.asStateFlow()
 
     fun onSignInWithGoogleClicked() {
+        _signInError.value = false
         viewModelScope.launch {
             _signInRequest.emit(authManager.getGoogleSignInRequest())
         }
+    }
+
+    fun onSignInError() {
+        _signInError.value = true
     }
 
     fun handleSignInResult(result: GetCredentialResponse) {
@@ -34,9 +45,5 @@ class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
 
     fun onSetPasswordClicked(password: String) {
         authManager.setPassword(password)
-    }
-
-    fun onGoogleSignInSuccess() {
-        authManager.setGoogleSignInSuccess()
     }
 }
