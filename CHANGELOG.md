@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Fixed
+- Addressed a bug where the `OnBackInvokedCallback` was not enabled, causing warnings on newer Android versions.
+- Improved camera performance in the `ScannerActivity` by setting a specific target resolution, which should prevent frame drops on lower-end devices.
+- Fixed a `BufferQueue` error by correcting the camera lifecycle management in `ScannerActivity`, ensuring resources are released properly.
+
 ### 0.2.0 - The Oracle - 2025-09-08
 
 #### Added

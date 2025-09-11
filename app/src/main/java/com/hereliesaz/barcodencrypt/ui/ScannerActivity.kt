@@ -178,6 +178,7 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
                 }
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(android.util.Size(1280, 720))
                     .build()
                     .also {
                         it.setAnalyzer(
@@ -192,12 +193,14 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
                     }
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 try {
-                    cameraProvider.unbindAll()
                     cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalyzer)
                 } catch (exc: Exception) {
                     Log.e("ScannerScreen", "Use case binding failed", exc)
                 }
                 previewView
+            },
+            onRelease = {
+                cameraProviderFuture.get().unbindAll()
             },
             modifier = Modifier.fillMaxSize()
         )
