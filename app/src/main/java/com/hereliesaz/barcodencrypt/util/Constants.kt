@@ -17,13 +17,6 @@ object Constants {
         const val CORRECT_KEY = "com.hereliesaz.barcodencrypt.CORRECT_KEY"
         const val BOUNDS = "com.hereliesaz.barcodencrypt.BOUNDS"
         const val TUTORIAL_BARCODE = "com.hereliesaz.barcodencrypt.TUTORIAL_BARCODE"
-    }
-
-    /**
-     * Contains all keys used for SharedPreferences.
-     */
-    object Prefs {
-        const val PREFS_NAME = "barcodencrypt_prefs"
-        const val PREF_PASSWORD_ASSISTANCE_ENABLED = "password_assistance_enabled"
+        const val PASSWORD_FIELD_ID = "com.hereliesaz.barcodencrypt.PASSWORD_FIELD_ID"
     }
 }

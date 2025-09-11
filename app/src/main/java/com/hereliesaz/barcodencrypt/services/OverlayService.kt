@@ -45,9 +45,7 @@ import com.hereliesaz.barcodencrypt.ui.PasswordDialog
 import com.hereliesaz.barcodencrypt.ui.PasswordScannerTrampolineActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
-import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.MessageParser
-import com.hereliesaz.barcodencrypt.util.PasswordPasteManager
+import com.hereliesaz.barcodencrypt.util.*
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
@@ -68,6 +66,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     private val overlayState = mutableStateOf<OverlayState>(OverlayState.Initial)
     private var encryptedText: String? = null
     private var barcodeName: String? = null
+    private var passwordFieldId: String? = null
     private val scannedSequence = mutableListOf<String>()
     private var scanReceiver: BroadcastReceiver? = null
 
@@ -98,7 +97,11 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == ACTION_SCAN_RESULT) {
                     val scannedValue = intent.getStringExtra(Constants.IntentKeys.SCAN_RESULT)
-                    handleScannedKey(scannedValue)
+                    if (passwordFieldId != null && scannedValue != null) {
+                        handlePasswordUnlock(scannedValue)
+                    } else {
+                        handleScannedKey(scannedValue)
+                    }
                 }
             }
         }
@@ -106,6 +109,24 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT), RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(scanReceiver, IntentFilter(ACTION_SCAN_RESULT))
+        }
+    }
+
+    private fun handlePasswordUnlock(scannedBarcodeValue: String) {
+        val fieldId = passwordFieldId ?: return
+        serviceScope.launch(Dispatchers.IO) {
+            val dao = AppDatabase.getDatabase(application).passwordEntryDao()
+            val passwordManager = PasswordManager(dao)
+            val unlockedPassword = passwordManager.unlockPassword(fieldId, scannedBarcodeValue)
+
+            withContext(Dispatchers.Main) {
+                if (unlockedPassword != null) {
+                    PasswordPasteManager.paste(unlockedPassword)
+                    overlayState.value = OverlayState.Success("Password unlocked and pasted!")
+                } else {
+                    overlayState.value = OverlayState.Failure
+                }
+            }
         }
     }
 
@@ -152,6 +173,7 @@ class OverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                     stopSelf()
                     return START_NOT_STICKY
                 }
+                passwordFieldId = intent.getStringExtra(Constants.IntentKeys.PASSWORD_FIELD_ID)
                 overlayState.value = OverlayState.PasswordIcon
                 createOverlay(bounds)
             }
