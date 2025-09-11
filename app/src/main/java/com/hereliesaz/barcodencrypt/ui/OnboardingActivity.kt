@@ -59,7 +59,9 @@ class OnboardingActivity : ComponentActivity() {
         lifecycleScope.launch {
             onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? -> // Specified type
                 if (credential != null) {
-                    startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))
+                    val intent = Intent(this@OnboardingActivity, MainActivity::class.java)
+                    intent.putExtra("FROM_ONBOARDING", true)
+                    startActivity(intent)
                     finish()
                 } else {
                     // TODO: Handle failed sign in

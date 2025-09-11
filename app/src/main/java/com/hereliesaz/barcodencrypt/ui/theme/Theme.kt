@@ -28,9 +28,22 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = OffWhite,
 )
 
+private val LightColorScheme = darkColorScheme(
+    primary = DarkGray,
+    secondary = MediumGray,
+    tertiary = LightGray,
+    background = OffWhite,
+    surface = OffWhite,
+    onPrimary = OffWhite,
+    onSecondary = DarkGray,
+    onTertiary = DarkGray,
+    onBackground = DarkGray,
+    onSurface = DarkGray,
+)
+
 @Composable
 fun BarcodencryptTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
@@ -41,7 +54,7 @@ fun BarcodencryptTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> DarkColorScheme
-        else -> DarkColorScheme // App is always dark themed.
+        else -> LightColorScheme
     }
     val view = LocalView.current
     if (!view.isInEditMode) {
