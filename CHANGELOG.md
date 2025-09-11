@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. The format 
 ## [Unreleased]
 
 ### Fixed
+- Improved the sign-in flow to gracefully handle errors and provide a retry mechanism.
 - Added a permission card to prompt the user to grant notification permission, which is required for the message highlighting feature to work on Android 13+.
 - Refactored the camera implementation in `ScannerActivity` to use a `ViewModel` for better lifecycle management and stability. This should finally resolve the long-standing `BufferQueue` errors.
 - Addressed a bug where the `OnBackInvokedCallback` was not enabled, causing warnings on newer Android versions.
