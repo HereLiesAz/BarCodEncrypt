@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import android.widget.Toast
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.MainActivity
@@ -39,6 +40,12 @@ class OnboardingActivity : ComponentActivity() {
                 try {
                     val result = credentialManager.getCredential(this@OnboardingActivity, request)
                     onboardingViewModel.handleSignInResult(result)
+                } catch (e: NoCredentialException) {
+                    Log.e("OnboardingActivity", "No credentials found.", e)
+                    onboardingViewModel.onNoCredentialsFound()
+                    runOnUiThread {
+                        Toast.makeText(this@OnboardingActivity, "No Google accounts found. Please set a password.", Toast.LENGTH_LONG).show()
+                    }
                 } catch (e: GetCredentialException) {
                     Log.e("OnboardingActivity", "GetCredentialException", e)
                     onboardingViewModel.onSignInError()

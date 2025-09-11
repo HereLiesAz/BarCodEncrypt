@@ -36,6 +36,7 @@ fun OnboardingScreen(
     }
 
     val signInError by onboardingViewModel.signInError.collectAsState()
+    val noCredentialsFound by onboardingViewModel.noCredentialsFound.collectAsState()
 
     Column(
         modifier = Modifier
@@ -46,15 +47,21 @@ fun OnboardingScreen(
     ) {
         Text("Welcome to Barcodencrypt")
         Spacer(modifier = Modifier.height(32.dp))
-        if (signInError) {
-            Button(onClick = { onboardingViewModel.onSignInWithGoogleClicked() }) {
-                Text("Retry Sign-in")
-            }
-        } else {
-            Button(onClick = { onboardingViewModel.onSignInWithGoogleClicked() }) {
-                Text("Sign in with Google")
-            }
+
+        Button(
+            onClick = { onboardingViewModel.onSignInWithGoogleClicked() },
+            enabled = !noCredentialsFound
+        ) {
+            Text(if (signInError) "Retry Sign-in" else "Sign in with Google")
         }
+
+        if (noCredentialsFound) {
+            Text(
+                "No Google accounts found. Please set a password to continue.",
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = { showPasswordDialog = true }) {
             Text("Set a password")

@@ -25,8 +25,12 @@ class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
     private val _signInError = MutableStateFlow(false)
     val signInError: StateFlow<Boolean> = _signInError.asStateFlow()
 
+    private val _noCredentialsFound = MutableStateFlow(false)
+    val noCredentialsFound: StateFlow<Boolean> = _noCredentialsFound.asStateFlow()
+
     fun onSignInWithGoogleClicked() {
         _signInError.value = false
+        _noCredentialsFound.value = false
         viewModelScope.launch {
             _signInRequest.emit(authManager.getGoogleSignInRequest())
         }
@@ -34,6 +38,10 @@ class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
 
     fun onSignInError() {
         _signInError.value = true
+    }
+
+    fun onNoCredentialsFound() {
+        _noCredentialsFound.value = true
     }
 
     fun handleSignInResult(result: GetCredentialResponse) {
