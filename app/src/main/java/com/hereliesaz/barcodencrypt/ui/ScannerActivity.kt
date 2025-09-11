@@ -10,11 +10,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
+import androidx.activity.viewModels
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,12 +24,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,26 +34,30 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.MainActivity
-import com.hereliesaz.barcodencrypt.ui.ComposeActivity
-import com.hereliesaz.barcodencrypt.ui.SettingsActivity
+import com.hereliesaz.barcodencrypt.R
 import com.hereliesaz.barcodencrypt.ui.composable.AppScaffoldWithNavRail
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.util.Constants
-import com.hereliesaz.barcodencrypt.util.TutorialManager // Keep for isTutorialRunning and onBarcodeScanned
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import com.hereliesaz.barcodencrypt.util.TutorialManager
+import com.hereliesaz.barcodencrypt.viewmodel.CameraViewModel
+import com.hereliesaz.barcodencrypt.viewmodel.CameraViewModelFactory
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ScannerActivity : ComponentActivity() {
 
-    private lateinit var cameraExecutor: ExecutorService
+    private val cameraViewModel: CameraViewModel by viewModels {
+        CameraViewModelFactory(application)
+    }
+    private lateinit var previewView: PreviewView
     private var showTutorialDialogState by mutableStateOf(false)
+    private var barcodeFound = AtomicBoolean(false)
+
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                setupCameraWithTutorialCheck()
+                setupCamera()
             } else {
                 Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_LONG).show()
                 finish()
@@ -68,35 +67,23 @@ class ScannerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        cameraExecutor = Executors.newSingleThreadExecutor()
+        previewView = PreviewView(this)
 
-        // Check for tutorial state before deciding to show dialog or setup camera directly
         if (TutorialManager.isTutorialRunning()) {
-            showTutorialDialogState = true // Set state to show Compose dialog
+            showTutorialDialogState = true
         }
 
-        // Permission check and camera setup will now be handled after dialog (if shown) or directly
-        // The actual call to setupCamera() will be in setupCameraWithTutorialCheck or after dialog dismissal
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            setupCameraWithTutorialCheck() // Proceed to setup camera (which includes setContent)
+            setupCamera()
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
-    }
 
-    private fun setupCameraWithTutorialCheck() {
-        // This function now correctly sets the content, including the dialog if needed.
         setContent {
             BarcodencryptTheme {
-                // Potentially show tutorial dialog here
                 if (showTutorialDialogState) {
                     AlertDialog(
-                        onDismissRequest = {
-                            showTutorialDialogState = false
-                            // Proceed with camera setup if needed, or ensure it's already in progress
-                            // If not already in content, ensure camera setup logic runs after dismissal
-                            // For now, assume camera setup will be part of the main screenContent
-                        },
+                        onDismissRequest = { showTutorialDialogState = false },
                         title = { Text("Tutorial: Step 1") },
                         text = { Text("Scan any barcode. This will be your secret key.") },
                         confirmButton = {
@@ -129,79 +116,75 @@ class ScannerActivity : ComponentActivity() {
                         finish()
                     },
                     screenContent = {
-                        ScannerScreen(
-                            onBarcodeFound = { barcodeValue ->
-                                if (isFinishing || isDestroyed) return@ScannerScreen
-                                if (TutorialManager.isTutorialRunning()) {
-                                    TutorialManager.onBarcodeScanned(barcodeValue)
-                                    val intent = Intent(this, MockMessagesActivity::class.java).apply {
-                                        putExtra(Constants.IntentKeys.TUTORIAL_BARCODE, barcodeValue)
-                                    }
-                                    startActivity(intent)
-                                    finish()
-                                } else {
-                                    val resultIntent = Intent().apply {
-                                        putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
-                                    }
-                                    setResult(Activity.RESULT_OK, resultIntent)
-                                    finish()
-                                }
-                            }
-                        )
+                        ScannerScreen(previewView)
                     }
                 )
             }
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraExecutor.shutdown()
+    private fun setupCamera() {
+        cameraViewModel.cameraProviderLiveData.observe(this) { cameraProvider ->
+            cameraViewModel.bindUseCases(cameraProvider, this)
+            cameraViewModel.previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+            cameraViewModel.imageAnalysisUseCase.setAnalyzer(
+                cameraViewModel.cameraExecutor,
+                BarcodeAnalyzer()
+            )
+        }
+    }
+
+    private inner class BarcodeAnalyzer : ImageAnalysis.Analyzer {
+        private val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().build())
+
+        @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+        override fun analyze(imageProxy: ImageProxy) {
+            val mediaImage = imageProxy.image
+            if (mediaImage != null) {
+                val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                scanner.process(image)
+                    .addOnSuccessListener { barcodes ->
+                        for (barcode in barcodes) {
+                            barcode.rawValue?.let {
+                                if (barcodeFound.compareAndSet(false, true)) {
+                                    handleBarcode(it)
+                                }
+                                return@addOnSuccessListener
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e -> Log.e("BarcodeAnalyzer", "Analysis failed.", e) }
+                    .addOnCompleteListener { imageProxy.close() }
+            }
+        }
+    }
+
+    private fun handleBarcode(barcodeValue: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (TutorialManager.isTutorialRunning()) {
+                TutorialManager.onBarcodeScanned(barcodeValue)
+                val intent = Intent(this, MockMessagesActivity::class.java).apply {
+                    putExtra(Constants.IntentKeys.TUTORIAL_BARCODE, barcodeValue)
+                }
+                startActivity(intent)
+                finish()
+            } else {
+                val resultIntent = Intent().apply {
+                    putExtra(Constants.IntentKeys.SCAN_RESULT, barcodeValue)
+                }
+                setResult(Activity.RESULT_OK, resultIntent)
+                finish()
+            }
+        }
     }
 }
 
-
 @Composable
-fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    var barcodeFound by remember { mutableStateOf(false) }
-
+fun ScannerScreen(previewView: PreviewView) {
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val cameraProvider = cameraProviderFuture.get()
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-                val imageAnalyzer = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setTargetResolution(android.util.Size(1280, 720))
-                    .build()
-                    .also {
-                        it.setAnalyzer(
-                            ContextCompat.getMainExecutor(ctx),
-                            BarcodeAnalyzer { barcodeValue ->
-                                if (!barcodeFound) {
-                                    barcodeFound = true
-                                    onBarcodeFound(barcodeValue)
-                                }
-                            }
-                        )
-                    }
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                try {
-                    cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalyzer)
-                } catch (exc: Exception) {
-                    Log.e("ScannerScreen", "Use case binding failed", exc)
-                }
-                previewView
-            },
-            onRelease = {
-                cameraProviderFuture.get().unbindAll()
-            },
+            factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
         Text(
@@ -212,28 +195,5 @@ fun ScannerScreen(onBarcodeFound: (String) -> Unit) {
                 .align(Alignment.BottomCenter)
                 .padding(32.dp)
         )
-    }
-}
-
-private class BarcodeAnalyzer(private val listener: (String) -> Unit) : ImageAnalysis.Analyzer {
-    private val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().build())
-
-    @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-    override fun analyze(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            scanner.process(image)
-                .addOnSuccessListener { barcodes ->
-                    for (barcode in barcodes) {
-                        barcode.rawValue?.let {
-                            listener(it)
-                            return@addOnSuccessListener
-                        }
-                    }
-                }
-                .addOnFailureListener { e -> Log.e("BarcodeAnalyzer", "Analysis failed.", e) }
-                .addOnCompleteListener { imageProxy.close() }
-        }
     }
 }
