@@ -5,6 +5,5 @@
 
     <style name="Theme.App.Starting" parent="Theme.Barcodencrypt">
         <item name="android:windowBackground">@color/dark_gray</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
     </style>
 </resources>
