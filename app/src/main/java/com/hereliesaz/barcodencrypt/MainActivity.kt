@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("MainActivity", "onCreate")
+
         setTheme(R.style.Theme_Barcodencrypt)
         super.onCreate(savedInstanceState)
 

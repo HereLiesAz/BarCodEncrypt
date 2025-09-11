@@ -86,7 +86,7 @@
     <string name="autofill_service_enabled_text">Autofill Service Enabled</string>
     <string name="enable_autofill_service_button_text">Enable Autofill Service</string>
     <string name="key_added">Key added.</string>
-    <string name="web_client_id" translatable="false">1073139954141-i45hcf43c5flos3g7sqvqcba18903eon.apps.googleusercontent.com</string>
+    <string name="web_client_id" translatable="false">1073139954141-s38j99affpr4835hn65dp6kt82n296ja.apps.googleusercontent.com</string>
     <string name="try_me">Try Me</string>
 </resources>
 
