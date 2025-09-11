@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_Barcodencrypt)
         super.onCreate(savedInstanceState)
 
         viewModel.checkLoginStatus()
