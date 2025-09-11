@@ -25,19 +25,11 @@ class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
     private val _signInError = MutableStateFlow(false)
     val signInError: StateFlow<Boolean> = _signInError.asStateFlow()
 
-    private val _noGoogleAccountsFound = MutableStateFlow(false)
-    val noGoogleAccountsFound: StateFlow<Boolean> = _noGoogleAccountsFound.asStateFlow()
-
     fun onSignInWithGoogleClicked() {
         _signInError.value = false
-        _noGoogleAccountsFound.value = false
         viewModelScope.launch {
             _signInRequest.emit(authManager.getGoogleSignInRequest())
         }
-    }
-
-    fun onNoGoogleAccountsFound() {
-        _noGoogleAccountsFound.value = true
     }
 
     fun onSignInError() {
@@ -53,9 +45,5 @@ class OnboardingViewModel(private val authManager: AuthManager) : ViewModel() {
 
     fun onSetPasswordClicked(password: String) {
         authManager.setPassword(password)
-    }
-
-    fun onGoogleSignInSuccess() {
-        authManager.setGoogleSignInSuccess()
     }
 }

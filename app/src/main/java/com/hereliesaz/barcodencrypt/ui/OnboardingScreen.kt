@@ -36,7 +36,6 @@ fun OnboardingScreen(
     }
 
     val signInError by onboardingViewModel.signInError.collectAsState()
-    val noGoogleAccountsFound by onboardingViewModel.noGoogleAccountsFound.collectAsState()
 
     Column(
         modifier = Modifier
@@ -55,10 +54,6 @@ fun OnboardingScreen(
             Button(onClick = { onboardingViewModel.onSignInWithGoogleClicked() }) {
                 Text("Sign in with Google")
             }
-        }
-        if (noGoogleAccountsFound) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("No Google accounts found on this device.")
         }
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = { showPasswordDialog = true }) {

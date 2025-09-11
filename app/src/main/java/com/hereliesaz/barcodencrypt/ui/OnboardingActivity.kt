@@ -9,7 +9,6 @@ import androidx.activity.viewModels
 import android.widget.Toast
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
-import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.MainActivity
@@ -42,13 +41,9 @@ class OnboardingActivity : ComponentActivity() {
                     onboardingViewModel.handleSignInResult(result)
                 } catch (e: GetCredentialException) {
                     Log.e("OnboardingActivity", "GetCredentialException", e)
-                    if (e is NoCredentialException) {
-                        onboardingViewModel.onNoGoogleAccountsFound()
-                    } else {
-                        onboardingViewModel.onSignInError()
-                        runOnUiThread {
-                            Toast.makeText(this@OnboardingActivity, "Sign-in failed. Please try again.", Toast.LENGTH_LONG).show()
-                        }
+                    onboardingViewModel.onSignInError()
+                    runOnUiThread {
+                        Toast.makeText(this@OnboardingActivity, "Sign-in failed. Please try again.", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -57,7 +52,6 @@ class OnboardingActivity : ComponentActivity() {
         lifecycleScope.launch {
             onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? -> // Specified type
                 if (credential != null) {
-                    onboardingViewModel.onGoogleSignInSuccess()
                     startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))
                     finish()
                 } else {
