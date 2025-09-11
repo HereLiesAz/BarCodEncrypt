@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import android.widget.Toast
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
@@ -40,6 +41,10 @@ class OnboardingActivity : ComponentActivity() {
                     onboardingViewModel.handleSignInResult(result)
                 } catch (e: GetCredentialException) {
                     Log.e("OnboardingActivity", "GetCredentialException", e)
+                    onboardingViewModel.onSignInError()
+                    runOnUiThread {
+                        Toast.makeText(this@OnboardingActivity, "Sign-in failed. Please try again.", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }

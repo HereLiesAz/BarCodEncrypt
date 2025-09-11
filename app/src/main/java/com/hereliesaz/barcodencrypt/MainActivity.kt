@@ -273,6 +273,10 @@ fun MainScreen(
                     context.startActivity(intent)
                 }
             )
+            NotificationPermissionCard(
+                isGranted = notificationPermissionGranted,
+                onRequest = onRequestNotificationPermission
+            )
         }
         Spacer(Modifier.height(16.dp))
 
@@ -340,6 +344,24 @@ fun OverlayPermissionCard(isGranted: Boolean, onRequest: () -> Unit) {
         PermissionRequestRow(
             title = "Overlay Permission Required",
             description = "Permission is needed to highlight messages on screen.",
+            onRequest = onRequest
+        )
+    }
+}
+
+@Composable
+fun NotificationPermissionCard(isGranted: Boolean, onRequest: () -> Unit) {
+    if (isGranted) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary)
+    ) {
+        PermissionRequestRow(
+            title = "Notification Permission Required",
+            description = "Permission is needed to show a notification when an encrypted message is found.",
             onRequest = onRequest
         )
     }
