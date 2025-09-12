@@ -33,15 +33,17 @@ import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
 import com.hereliesaz.barcodencrypt.ui.theme.DisabledRed
 import com.hereliesaz.barcodencrypt.ui.theme.EnabledGreen
 import com.hereliesaz.barcodencrypt.util.Constants
+import com.hereliesaz.barcodencrypt.util.LogConfig
 import com.hereliesaz.barcodencrypt.util.ScannerManager
 import com.hereliesaz.barcodencrypt.viewmodel.MainViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val TAG = "MainActivity"
 
     private val viewModel: MainViewModel by viewModels {
-        MainViewModelFactory(applicationContext)
+        MainViewModelFactory(application)
     }
 
     private val scanLauncher =
@@ -79,24 +81,18 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.d("MainActivity", "onCreate")
-
-        setTheme(R.style.Theme_Barcodencrypt)
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onCreate")
         super.onCreate(savedInstanceState)
 
-        val fromOnboarding = intent.getBooleanExtra("FROM_ONBOARDING", false)
-        Log.d("MainActivity", "fromOnboarding: $fromOnboarding")
-        if (!fromOnboarding) {
-            Log.d("MainActivity", "Checking login status")
-            viewModel.checkLoginStatus()
-            viewModel.isLoggedIn.observe(this) { isLoggedIn ->
-                Log.d("MainActivity", "isLoggedIn observer: $isLoggedIn")
-                if (isLoggedIn == false) {
-                    Log.d("MainActivity", "Redirecting to OnboardingActivity")
-                    startActivity(Intent(this, OnboardingActivity::class.java))
-                    finish()
-                    return@observe
-                }
+        viewModel.isLoggedIn.observe(this) { isLoggedIn ->
+            if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "isLoggedIn observer fired with value: $isLoggedIn")
+            // Only redirect if the state is explicitly false (logged out)
+            if (isLoggedIn == false) {
+                if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "isLoggedIn is false. Redirecting to OnboardingActivity.")
+                startActivity(Intent(this, OnboardingActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                })
+                finish()
             }
         }
 
@@ -109,75 +105,97 @@ class MainActivity : ComponentActivity() {
         setContent {
             BarcodencryptTheme {
                 val isLoggedIn by viewModel.isLoggedIn.observeAsState()
-                if (isLoggedIn == true) {
-                    var showPasswordDialog by remember { mutableStateOf(true) }
-                    val passwordCorrect by viewModel.passwordCorrect.observeAsState()
+                if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing UI with isLoggedIn state: $isLoggedIn")
 
-                    if (showPasswordDialog && passwordCorrect != true) {
-                        BackHandler(enabled = true) {
-                            // Do nothing
+                // Only show content when the login state is determined
+                when (isLoggedIn) {
+                    true -> { // User is logged in, show the main content
+                        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Main UI.")
+                        var showPasswordDialog by remember { mutableStateOf(true) }
+                        val passwordCorrect by viewModel.passwordCorrect.observeAsState()
+
+                        if (showPasswordDialog && passwordCorrect != true) {
+                            BackHandler(enabled = true) {
+                                // Do nothing
+                            }
+                            PasswordDialog(
+                                onDismiss = { /* Do nothing */ },
+                                onConfirm = { password ->
+                                    viewModel.checkPassword(password)
+                                })
                         }
-                        PasswordDialog(
-                            onDismiss = { /* Do nothing */ },
-                            onConfirm = { password ->
-                                viewModel.checkPassword(password)
-                            })
+
+                        if (passwordCorrect == true) {
+                            val context = LocalContext.current
+                            val onManageContactKeysLambda = {
+                                val hasPermission = ContextCompat.checkSelfPermission(
+                                    this, Manifest.permission.READ_CONTACTS
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    contactPickerLauncher.launch(
+                                        Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+                                    )
+                                } else {
+                                    contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                                }
+                            }
+
+                            AppScaffoldWithNavRail(
+                                screenTitle = "Barcodencrypt",
+                                onNavigateToManageKeys = onManageContactKeysLambda,
+                                onNavigateToCompose = {
+                                    startActivity(Intent(this, ComposeActivity::class.java).apply {
+                                        flags =
+                                            Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                    })
+                                },
+                                onNavigateToSettings = {
+                                    startActivity(Intent(this, SettingsActivity::class.java).apply {
+                                        flags =
+                                            Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                    })
+                                },
+                                onNavigateToTryMe = {
+                                    com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
+                                    startActivity(Intent(this, ScannerActivity::class.java))
+                                },
+                                screenContent = {
+                                    MainScreen(
+                                        viewModel = viewModel,
+                                        onRequestNotificationPermission = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        },
+                                        onManageContactKeys = onManageContactKeysLambda
+                                    )
+                                }
+                            )
+                        }
                     }
-
-                    if (passwordCorrect == true) {
-                        val context = LocalContext.current
-                        val onManageContactKeysLambda = {
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                this, Manifest.permission.READ_CONTACTS
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPermission) {
-                                contactPickerLauncher.launch(
-                                    Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
-                                )
-                            } else {
-                                contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                            }
+                    else -> { // User is logged out (false) or state is loading (null)
+                        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Loading UI.")
+                        // Show a loading indicator to prevent screen flashing and premature redirects
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
                         }
-
-                        AppScaffoldWithNavRail(
-                            screenTitle = "Barcodencrypt",
-                            onNavigateToManageKeys = onManageContactKeysLambda,
-                            onNavigateToCompose = {
-                                startActivity(Intent(this, ComposeActivity::class.java).apply {
-                                    flags =
-                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                                })
-                            },
-                            onNavigateToSettings = {
-                                startActivity(Intent(this, SettingsActivity::class.java).apply {
-                                    flags =
-                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                                })
-                            },
-                            onNavigateToTryMe = {
-                                com.hereliesaz.barcodencrypt.util.TutorialManager.startTutorial()
-                                startActivity(Intent(this, ScannerActivity::class.java))
-                            },
-                            screenContent = {
-                                MainScreen(
-                                    viewModel = viewModel,
-                                    onRequestNotificationPermission = {
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    },
-                                    onManageContactKeys = onManageContactKeysLambda
-                                )
-                            }
-                        )
                     }
                 }
             }
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onStart")
+    }
+
     override fun onResume() {
         super.onResume()
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onResume")
         viewModel.serviceStatus.value = isAccessibilityServiceEnabled()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             viewModel.notificationPermissionStatus.value =
@@ -191,6 +209,21 @@ class MainActivity : ComponentActivity() {
             this, Manifest.permission.READ_CONTACTS
         ) == PackageManager.PERMISSION_GRANTED
         viewModel.overlayPermissionStatus.value = Settings.canDrawOverlays(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onPause")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onStop")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onDestroy")
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {

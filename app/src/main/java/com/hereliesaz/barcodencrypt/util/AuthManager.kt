@@ -8,15 +8,20 @@ import android.util.Base64
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.Firebase
 import com.hereliesaz.barcodencrypt.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.nio.charset.Charset
 import java.security.KeyStore
@@ -30,12 +35,28 @@ class AuthManager(
     private val context: Context,
     private val sharedPreferences: SharedPreferences
 ) {
-    // Re-committing to trigger a new build for the user.
+    private val TAG = "AuthManager"
 
     private val credentialManager = CredentialManager.create(context)
     private val auth: FirebaseAuth = Firebase.auth
     private val webClientId by lazy {
         context.getString(R.string.web_client_id)
+    }
+
+    private val _user = MutableStateFlow<FirebaseUser?>(auth.currentUser)
+    val user: StateFlow<FirebaseUser?> = _user.asStateFlow()
+
+    private val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+        _user.value = firebaseAuth.currentUser
+        if (LogConfig.AUTH_FLOW) {
+            val uid = firebaseAuth.currentUser?.uid
+            Log.d(TAG, "AuthStateListener fired. User is now: ${uid ?: "null"}")
+        }
+    }
+
+    init {
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "init: AuthManager instance initialized. Current Firebase user: ${auth.currentUser?.uid ?: "null"}")
+        auth.addAuthStateListener(authStateListener)
     }
 
     private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
@@ -61,17 +82,17 @@ class AuthManager(
         return keyGenerator.generateKey()
     }
 
-    fun isLoggedIn(): Boolean {
-        val hasLocalPassword = sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY)
-        val hasFirebaseUser = auth.currentUser != null
-        Log.d("AuthManager", "isLoggedIn: hasLocalPassword=$hasLocalPassword, hasFirebaseUser=$hasFirebaseUser")
-        return hasLocalPassword || hasFirebaseUser
+    fun hasLocalPassword(): Boolean {
+        val hasPass = sharedPreferences.contains(ENCRYPTED_PASSWORD_KEY)
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "hasLocalPassword() check: $hasPass")
+        return hasPass
     }
 
     fun getGoogleSignInRequest(): GetCredentialRequest {
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "getGoogleSignInRequest: Building Google Sign-In request.")
         val nonce = generateNonce()
         val googleIdOption: GetGoogleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
+            .setFilterByAuthorizedAccounts(true)
             .setServerClientId(webClientId)
             .setNonce(nonce)
             .build()
@@ -81,23 +102,52 @@ class AuthManager(
     }
 
     suspend fun handleSignInResult(result: GetCredentialResponse): GoogleIdTokenCredential? {
-        val credential = result.credential
-        if (credential is GoogleIdTokenCredential) {
-            val googleIdToken = credential.idToken
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "handleSignInResult: Received credential response from Google.")
+        var googleIdTokenCredential: GoogleIdTokenCredential? = null
+
+        // THIS IS THE FIX: Handle both direct and wrapped credential types
+        when (val credential = result.credential) {
+            is GoogleIdTokenCredential -> {
+                if (LogConfig.AUTH_FLOW) Log.d(TAG, "Credential is of type GoogleIdTokenCredential.")
+                googleIdTokenCredential = credential
+            }
+            is CustomCredential -> {
+                if (LogConfig.AUTH_FLOW) Log.d(TAG, "Credential is of type CustomCredential. Type: ${credential.type}")
+                if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    try {
+                        googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                        if (LogConfig.AUTH_FLOW) Log.d(TAG, "Successfully created GoogleIdTokenCredential from CustomCredential data.")
+                    } catch (e: Exception) {
+                        if (LogConfig.AUTH_FLOW) Log.e(TAG, "Failed to create GoogleIdTokenCredential from CustomCredential data.", e)
+                    }
+                }
+            }
+            else -> {
+                if (LogConfig.AUTH_FLOW) Log.w(TAG, "handleSignInResult: Credential response was not a recognized type. Type was: ${credential::class.java.simpleName}")
+            }
+        }
+
+
+        if (googleIdTokenCredential != null) {
+            val googleIdToken = googleIdTokenCredential.idToken
             val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
             return try {
+                if (LogConfig.AUTH_FLOW) Log.d(TAG, "Attempting to sign in with Firebase...")
                 val authResult = auth.signInWithCredential(firebaseCredential).await()
                 if (authResult.user != null) {
-                    credential
+                    if (LogConfig.AUTH_FLOW) Log.d(TAG, "Firebase sign-in SUCCESSFUL for user: ${authResult.user?.uid}")
+                    googleIdTokenCredential
                 } else {
-                    Log.e("AuthManager", "Firebase sign-in failed: authResult.user is null")
+                    if (LogConfig.AUTH_FLOW) Log.e(TAG, "Firebase sign-in failed: authResult.user is null")
                     null
                 }
             } catch (e: Exception) {
-                Log.e("AuthManager", "Firebase sign-in failed with exception", e)
+                if (LogConfig.AUTH_FLOW) Log.e(TAG, "Firebase sign-in FAILED with exception", e)
                 null
             }
         }
+
+        if (LogConfig.AUTH_FLOW) Log.e(TAG, "Could not obtain a valid GoogleIdTokenCredential.")
         return null
     }
 

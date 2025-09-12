@@ -14,13 +14,16 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.hereliesaz.barcodencrypt.MainActivity
 import com.hereliesaz.barcodencrypt.ui.theme.BarcodencryptTheme
+import com.hereliesaz.barcodencrypt.util.LogConfig
 import com.hereliesaz.barcodencrypt.viewmodel.OnboardingViewModel
 import com.hereliesaz.barcodencrypt.viewmodel.OnboardingViewModelFactory
 import kotlinx.coroutines.launch
 
 class OnboardingActivity : ComponentActivity() {
+    private val TAG = "OnboardingActivity"
+
     private val onboardingViewModel: OnboardingViewModel by viewModels {
-        OnboardingViewModelFactory(applicationContext)
+        OnboardingViewModelFactory(application)
     }
 
     private val credentialManager: CredentialManager by lazy {
@@ -28,7 +31,7 @@ class OnboardingActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.d("OnboardingActivity", "onCreate")
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onCreate")
         super.onCreate(savedInstanceState)
         setContent {
             BarcodencryptTheme {
@@ -39,16 +42,18 @@ class OnboardingActivity : ComponentActivity() {
         lifecycleScope.launch {
             onboardingViewModel.signInRequest.collect { request ->
                 try {
+                    if (LogConfig.AUTH_FLOW) Log.d(TAG, "signInRequest collected. Calling credentialManager.getCredential...")
                     val result = credentialManager.getCredential(this@OnboardingActivity, request)
+                    if (LogConfig.AUTH_FLOW) Log.d(TAG, "credentialManager.getCredential SUCCEEDED.")
                     onboardingViewModel.handleSignInResult(result)
                 } catch (e: NoCredentialException) {
-                    Log.e("OnboardingActivity", "No credentials found.", e)
+                    if (LogConfig.AUTH_FLOW) Log.e(TAG, "credentialManager.getCredential FAILED: No credentials found.", e)
                     onboardingViewModel.onNoCredentialsFound()
                     runOnUiThread {
                         Toast.makeText(this@OnboardingActivity, "No Google accounts found. Please set a password.", Toast.LENGTH_LONG).show()
                     }
                 } catch (e: GetCredentialException) {
-                    Log.e("OnboardingActivity", "GetCredentialException", e)
+                    if (LogConfig.AUTH_FLOW) Log.e(TAG, "credentialManager.getCredential FAILED: GetCredentialException.", e)
                     onboardingViewModel.onSignInError()
                     runOnUiThread {
                         Toast.makeText(this@OnboardingActivity, "Sign-in failed. Please try again.", Toast.LENGTH_LONG).show()
@@ -58,16 +63,42 @@ class OnboardingActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? -> // Specified type
+            onboardingViewModel.signInResult.collect { credential: GoogleIdTokenCredential? ->
                 if (credential != null) {
+                    if (LogConfig.AUTH_FLOW) Log.d(TAG, "signInResult collected: SUCCESS. Starting MainActivity.")
                     val intent = Intent(this@OnboardingActivity, MainActivity::class.java)
                     intent.putExtra("FROM_ONBOARDING", true)
                     startActivity(intent)
                     finish()
                 } else {
-                    // TODO: Handle failed sign in
+                    if (LogConfig.AUTH_FLOW) Log.w(TAG, "signInResult collected: FAILED (credential was null).")
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onResume")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onPause")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onStop")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (LogConfig.LIFECYCLE_ONBOARDING_ACTIVITY) Log.d(TAG, "onDestroy")
     }
 }

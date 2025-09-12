@@ -1,16 +1,17 @@
 package com.hereliesaz.barcodencrypt.viewmodel
 
-import android.content.Context
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.hereliesaz.barcodencrypt.util.AuthManager
+import com.hereliesaz.barcodencrypt.BarcodeApplication
 
-class MainViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+class MainViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-            val sharedPreferences = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+            // Get the singleton instance from the Application class
+            val authManager = (application as BarcodeApplication).authManager
             @Suppress("UNCHECKED_CAST")
-            return MainViewModel(AuthManager(context.applicationContext, sharedPreferences)) as T
+            return MainViewModel(authManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

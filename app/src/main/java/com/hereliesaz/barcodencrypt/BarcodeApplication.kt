@@ -1,17 +1,41 @@
 package com.hereliesaz.barcodencrypt
 
 import android.app.Application
+import android.content.Context
+import android.util.Log
 import com.google.crypto.tink.aead.AeadConfig
-import java.security.GeneralSecurityException
+import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import com.hereliesaz.barcodencrypt.data.AppDatabase
+import com.hereliesaz.barcodencrypt.util.AuthManager
+import com.hereliesaz.barcodencrypt.util.LogConfig
 
 class BarcodeApplication : Application() {
+    private val TAG = "BarcodeApplication"
+
+    val database: AppDatabase by lazy { AppDatabase.getDatabase(this) }
+
+    val authManager: AuthManager by lazy {
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "AuthManager singleton instance created.")
+        val sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        AuthManager(this, sharedPreferences)
+    }
 
     override fun onCreate() {
         super.onCreate()
-        try {
-            AeadConfig.register()
-        } catch (e: GeneralSecurityException) {
-            throw RuntimeException(e)
-        }
+        if (LogConfig.APPLICATION_START) Log.d(TAG, "onCreate: Application starting.")
+
+        // Initialize Firebase
+        FirebaseApp.initializeApp(this)
+
+        // Initialize Firebase App Check with the debug provider
+        val firebaseAppCheck = FirebaseAppCheck.getInstance()
+        firebaseAppCheck.installAppCheckProviderFactory(
+            DebugAppCheckProviderFactory.getInstance()
+        )
+
+        // Initialize Tink
+        AeadConfig.register()
     }
 }
