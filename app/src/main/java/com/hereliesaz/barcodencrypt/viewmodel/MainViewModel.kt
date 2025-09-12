@@ -16,7 +16,7 @@ class MainViewModel(private val authManager: AuthManager) : ViewModel() {
     val notificationPermissionStatus = MutableLiveData<Boolean>()
     val contactsPermissionStatus = MutableLiveData<Boolean>()
     val overlayPermissionStatus = MutableLiveData<Boolean>()
-    val isLoggedIn = MutableLiveData<Boolean?>(null) // null represents the initial loading state
+    val isLoggedIn = MutableLiveData<Boolean?>(null)
     val passwordCorrect = MutableLiveData<Boolean>()
 
     init {
@@ -29,6 +29,16 @@ class MainViewModel(private val authManager: AuthManager) : ViewModel() {
                     isLoggedIn.value = loggedIn
                 }
             }
+        }
+    }
+
+    // THIS IS THE MISSING METHOD
+    fun checkAuthMethod() {
+        if (authManager.isGoogleUserSignedIn()) {
+            if (LogConfig.AUTH_FLOW) Log.d(TAG, "User is signed in with Google. Bypassing password check.")
+            passwordCorrect.value = true
+        } else {
+            if (LogConfig.AUTH_FLOW) Log.d(TAG, "User is not signed in with Google. Password check is required.")
         }
     }
 

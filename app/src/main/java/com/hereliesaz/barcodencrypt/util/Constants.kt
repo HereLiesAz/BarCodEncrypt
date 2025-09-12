@@ -4,6 +4,8 @@ package com.hereliesaz.barcodencrypt.util
  * A centralized object for constants to ensure consistency across the application.
  */
 object Constants {
+    const val ACTION_SCAN_RESULT = "com.hereliesaz.barcodencrypt.ACTION_SCAN_RESULT"
+    const val ACTION_DECRYPT_MESSAGE = "com.hereliesaz.barcodencrypt.ACTION_DECRYPT_MESSAGE"
 
     /**
      * Contains all keys used for Intent extras. Using a centralized object prevents
@@ -18,5 +20,7 @@ object Constants {
         const val BOUNDS = "com.hereliesaz.barcodencrypt.BOUNDS"
         const val TUTORIAL_BARCODE = "com.hereliesaz.barcodencrypt.TUTORIAL_BARCODE"
         const val PASSWORD_FIELD_ID = "com.hereliesaz.barcodencrypt.PASSWORD_FIELD_ID"
+
+        }
     }
-}
+

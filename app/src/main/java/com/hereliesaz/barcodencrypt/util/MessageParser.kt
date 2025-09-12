@@ -1,41 +1,54 @@
 package com.hereliesaz.barcodencrypt.util
 
+import android.graphics.Rect
+import android.util.Base64
+import android.view.accessibility.AccessibilityNodeInfo
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.hereliesaz.barcodencrypt.crypto.model.TinkMessage
+import java.nio.charset.StandardCharsets
 
 object MessageParser {
 
     private const val HEADER_PREFIX_V4 = "~BCEv4~"
+    private val V4_REGEX = Regex("~BCEv4~([A-Za-z0-9+/=]+)")
 
-    fun parseV4Message(ciphertext: String): TinkMessage? {
-        if (!ciphertext.startsWith(HEADER_PREFIX_V4)) {
-            return null
-        }
+    fun parseV4Message(message: String): TinkMessage? {
+        val encodedJson = message.removePrefix(HEADER_PREFIX_V4)
         return try {
-            val json = String(android.util.Base64.decode(ciphertext.removePrefix(HEADER_PREFIX_V4), android.util.Base64.NO_WRAP), Charsets.UTF_8)
-            val gson = Gson()
-            gson.fromJson(json, TinkMessage::class.java)
+            val json = String(Base64.decode(encodedJson, Base64.DEFAULT), StandardCharsets.UTF_8)
+            Gson().fromJson(json, TinkMessage::class.java)
         } catch (e: Exception) {
-            null
+            when (e) {
+                is IllegalArgumentException, is JsonSyntaxException -> null
+                else -> throw e
+            }
         }
     }
 
-    fun getBarcodeNameFromMessage(message: String): String? {
-        val parts = message.split("::")
-        return when {
-            message.startsWith(HEADER_PREFIX_V4) -> parseV4Message(message)?.keyName
-            message.startsWith("BCE::v2") && parts.size >= 4 -> parts[3]
-            message.startsWith("~BCE~") -> {
-                try {
-                    val payload = android.util.Base64.decode(message.removePrefix("~BCE~"), android.util.Base64.NO_WRAP)
-                    var offset = 2 // skip version and flags
-                    val keyNameSize = payload[offset++]
-                    String(payload, offset, keyNameSize.toInt(), Charsets.UTF_8)
-                } catch (e: Exception) {
-                    null
+    // THIS IS THE NEWLY ADDED FUNCTION
+    fun findAllV4MessagesWithNodes(rootNode: AccessibilityNodeInfo): List<Pair<String, AccessibilityNodeInfo>> {
+        val messages = mutableListOf<Pair<String, AccessibilityNodeInfo>>()
+        val nodesToSearch = ArrayDeque<AccessibilityNodeInfo>()
+        nodesToSearch.add(rootNode)
+
+        while (nodesToSearch.isNotEmpty()) {
+            val currentNode = nodesToSearch.removeFirst()
+
+            currentNode.text?.let { text ->
+                V4_REGEX.findAll(text).forEach { matchResult ->
+                    // Create a copy for the pair, as the original node will be recycled
+                    messages.add(Pair(matchResult.value, AccessibilityNodeInfo.obtain(currentNode)))
                 }
             }
-            else -> null
+
+            for (i in 0 until currentNode.childCount) {
+                val child = currentNode.getChild(i)
+                if (child != null) {
+                    nodesToSearch.add(child)
+                }
+            }
         }
+        return messages
     }
 }

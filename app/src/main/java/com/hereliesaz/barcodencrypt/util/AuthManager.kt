@@ -63,6 +63,14 @@ class AuthManager(
         load(null)
     }
 
+    // NEW METHOD to check for Google Sign-In
+    fun isGoogleUserSignedIn(): Boolean {
+        val isSignedIn = auth.currentUser != null
+        if (LogConfig.AUTH_FLOW) Log.d(TAG, "isGoogleUserSignedIn() check: $isSignedIn")
+        return isSignedIn
+    }
+
+
     private fun getSecretKey(): SecretKey {
         return (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
             ?: generateSecretKey()
@@ -105,7 +113,6 @@ class AuthManager(
         if (LogConfig.AUTH_FLOW) Log.d(TAG, "handleSignInResult: Received credential response from Google.")
         var googleIdTokenCredential: GoogleIdTokenCredential? = null
 
-        // THIS IS THE FIX: Handle both direct and wrapped credential types
         when (val credential = result.credential) {
             is GoogleIdTokenCredential -> {
                 if (LogConfig.AUTH_FLOW) Log.d(TAG, "Credential is of type GoogleIdTokenCredential.")

@@ -6,14 +6,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.util.Log
 import android.provider.ContactsContract
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
@@ -86,8 +83,11 @@ class MainActivity : ComponentActivity() {
 
         viewModel.isLoggedIn.observe(this) { isLoggedIn ->
             if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "isLoggedIn observer fired with value: $isLoggedIn")
-            // Only redirect if the state is explicitly false (logged out)
-            if (isLoggedIn == false) {
+
+            // MODIFIED LOGIC: Check auth method once we know the user is logged in
+            if (isLoggedIn == true) {
+                viewModel.checkAuthMethod()
+            } else if (isLoggedIn == false) {
                 if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "isLoggedIn is false. Redirecting to OnboardingActivity.")
                 startActivity(Intent(this, OnboardingActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -107,25 +107,13 @@ class MainActivity : ComponentActivity() {
                 val isLoggedIn by viewModel.isLoggedIn.observeAsState()
                 if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing UI with isLoggedIn state: $isLoggedIn")
 
-                // Only show content when the login state is determined
                 when (isLoggedIn) {
-                    true -> { // User is logged in, show the main content
-                        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Main UI.")
-                        var showPasswordDialog by remember { mutableStateOf(true) }
+                    true -> {
                         val passwordCorrect by viewModel.passwordCorrect.observeAsState()
 
-                        if (showPasswordDialog && passwordCorrect != true) {
-                            BackHandler(enabled = true) {
-                                // Do nothing
-                            }
-                            PasswordDialog(
-                                onDismiss = { /* Do nothing */ },
-                                onConfirm = { password ->
-                                    viewModel.checkPassword(password)
-                                })
-                        }
-
+                        // SIMPLIFIED LOGIC: Show main screen or password dialog based on a single state
                         if (passwordCorrect == true) {
+                            if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Main UI.")
                             val context = LocalContext.current
                             val onManageContactKeysLambda = {
                                 val hasPermission = ContextCompat.checkSelfPermission(
@@ -171,11 +159,18 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             )
+                        } else {
+                            // passwordCorrect is false or null, show the dialog
+                            if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Password Dialog.")
+                            PasswordDialog(
+                                onDismiss = { /* Disallow dismissing */ },
+                                onConfirm = { password ->
+                                    viewModel.checkPassword(password)
+                                })
                         }
                     }
-                    else -> { // User is logged out (false) or state is loading (null)
+                    else -> {
                         if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "Composing Loading UI.")
-                        // Show a loading indicator to prevent screen flashing and premature redirects
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -186,11 +181,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onStart")
     }
 
     override fun onResume() {
@@ -211,11 +201,6 @@ class MainActivity : ComponentActivity() {
         viewModel.overlayPermissionStatus.value = Settings.canDrawOverlays(this)
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onPause")
-    }
-
     override fun onStop() {
         super.onStop()
         if (LogConfig.LIFECYCLE_MAIN_ACTIVITY) Log.d(TAG, "onStop")
@@ -227,12 +212,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val accessibilityManager = getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices =
-            accessibilityManager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        val serviceId = "$packageName/${MessageDetectionService::class.java.canonicalName}"
-
-        return enabledServices.any { it.id == serviceId }
+        val service = "$packageName/${MessageDetectionService::class.java.canonicalName}"
+        val setting = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        return setting?.contains(service) == true
     }
 
     private fun launchContactDetail(contactUri: Uri) {

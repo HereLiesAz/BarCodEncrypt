@@ -31,11 +31,17 @@ class BarcodeApplication : Application() {
 
         // Initialize Firebase App Check with the debug provider
         val firebaseAppCheck = FirebaseAppCheck.getInstance()
+
+        // THIS IS THE CORRECTED LINE:
         firebaseAppCheck.installAppCheckProviderFactory(
             DebugAppCheckProviderFactory.getInstance()
         )
 
-        // Initialize Tink
-        AeadConfig.register()
+        // Add a listener to get the debug token and log it.
+        firebaseAppCheck.getAppCheckToken(true).addOnSuccessListener { token ->
+            if (token != null) {
+                Log.d("AppCheckDebug", "App Check Debug Token: ${token.token}")
+            }
+        }
     }
 }

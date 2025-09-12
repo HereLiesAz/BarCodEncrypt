@@ -35,6 +35,7 @@ gson = "2.13.1"
 googleid = "1.1.1"
 savedstateKtx = "1.3.2"
 tinkAndroid = "1.18.0"
+monitor = "1.8.0"
 
 [libraries]
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
@@ -69,6 +70,7 @@ core = { module = "com.google.zxing:core", version.ref = "core" }
 firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debug" }
 # firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" } # Removed firebase-auth-ktx
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+google-firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debug" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -84,6 +86,7 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockitoCore" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
 tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tinkAndroid" }
+androidx-monitor = { group = "androidx.test", name = "monitor", version.ref = "monitor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

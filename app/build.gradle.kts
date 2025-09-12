@@ -38,6 +38,7 @@ android {
     }
     kotlin {
         jvmToolchain(17)
+
     }
     buildFeatures {
         compose = true
@@ -69,7 +70,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.constraintlayout)
-    implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation(libs.google.firebase.appcheck.debug)
 
 
     // Lifecycle, ViewModel, LiveData
@@ -84,6 +85,7 @@ dependencies {
     // Room for Database
     implementation(libs.androidx.room.runtime)
     implementation(libs.googleid)
+    implementation(libs.androidx.monitor)
     // implementation(libs.firebase.auth) // <- Removed this line
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
