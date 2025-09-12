@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Added
+- Implemented a dark theme for the entire application.
+- The splash screen now has a dark grey background.
+
+### Changed
+- The button text on the onboarding screen was changed from "Set a password" to "Enter Password".
+- The text on the login screen is now white to be readable against the dark background.
+
 ### Fixed
 - Refactored the sign-in flow to use Firebase Authentication, which should resolve the `NoCredentialException` and improve stability. The flow now also gracefully handles errors and provides a retry mechanism.
 - Added a permission card to prompt the user to grant notification permission, which is required for the message highlighting feature to work on Android 13+.
