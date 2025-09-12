@@ -4,6 +4,7 @@ import android.util.Base64
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.subtle.AesGcmJce
 import com.google.crypto.tink.subtle.Hkdf
+import com.google.crypto.tink.subtle.Random
 import com.google.gson.Gson
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -53,8 +54,7 @@ object EncryptionManager {
         maxAttempts: Int = 0
     ): String? {
         return try {
-            val salt = ByteArray(16) // Standard salt size for HKDF
-            java.security.SecureRandom().nextBytes(salt)
+            val salt = Random.randBytes(16) // Standard salt size for HKDF
 
             // Derive encryption key using HKDF
             val derivedKeyBytes = Hkdf.computeHkdf(

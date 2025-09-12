@@ -6,9 +6,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.util.Log
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -192,12 +194,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = "$packageName/${MessageDetectionService::class.java.canonicalName}"
-        val setting = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        return setting?.contains(service) == true
+        val accessibilityManager = getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val enabledServices =
+            accessibilityManager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        val serviceId = "$packageName/${MessageDetectionService::class.java.canonicalName}"
+
+        return enabledServices.any { it.id == serviceId }
     }
 
     private fun launchContactDetail(contactUri: Uri) {
